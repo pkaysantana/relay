@@ -4,7 +4,6 @@
  * (src/routes/index.tsx on keshav-branch). Every card and count is derived from the canonical
  * engine state via src/relay/view.ts — there is no separate task store.
  */
-import Link from "next/link";
 import { todoItems, todoTiles } from "@/relay/view";
 import { useDemoState } from "@/state/store";
 
@@ -57,9 +56,16 @@ export default function TodoPage() {
                 <p className="mt-1">{t.detail}</p>
                 <p className="mt-1 text-sm text-muted-foreground">Owner: {t.owner}</p>
               </div>
-              <Link href={t.href} className="btn-primary shrink-0 justify-center px-5 py-3 text-base">
-                {t.button}
-              </Link>
+              <div className="flex shrink-0 flex-col gap-2">
+                <a href={t.href} className="btn-primary justify-center px-5 py-3 text-base">
+                  {t.button}
+                </a>
+                {t.compareHref && (
+                  <a href={t.compareHref} className="btn-secondary justify-center">
+                    Compare providers
+                  </a>
+                )}
+              </div>
             </article>
           </li>
         ))}

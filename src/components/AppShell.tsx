@@ -15,6 +15,7 @@ import { ErrorAlert, fmt } from "./ui";
 const NAV = [
   { href: "/", label: "To do" },
   { href: "/hub", label: "Handovers" },
+  { href: "/compare", label: "Compare providers" },
   { href: "/dashboard", label: "Reports" },
 ];
 const ROLES = [

@@ -1,10 +1,10 @@
 "use client";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { DemoState, TransferKind } from "@/core/types";
 import { TRANSFER_KINDS } from "@/core/types";
 import { PREPARED_DOCUMENTS } from "@/data/documents";
 import { parseLabelledDocument } from "@/extraction/labelledParser";
-import { listReceiverProfiles } from "@/packs/receivers";
+import { listReceiverProfiles, RECEIVER_PROFILES } from "@/packs/receivers";
 import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
 import { getDemoState, useCommand } from "@/state/store";
 import { ErrorAlert, Select } from "./ui";
@@ -39,6 +39,25 @@ export function CapturePanel({ state, onCreated }: { state: DemoState; onCreated
   const [byChoice, setByChoice] = useState(d.by);
   const capturedBy = capturers.some((p) => p.id === byChoice) ? byChoice : senderId;
   const pasteId = useId();
+  // Arriving from "Compare providers": open with the proposed provider pre-selected. Nothing is created
+  // until the coordinator presses "Extract and create draft"; agreement and confirmation still follow.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("capture") !== "1") return;
+    setOpen(true);
+    const patient = q.get("patient");
+    if (patient && state.patients.some((p) => p.id === patient)) {
+      setPatientId(patient);
+      const own = docs.filter((x) => x.intendedPatientId === patient).map((x) => x.id);
+      if (own.length) setDocIds(own);
+    }
+    const prof = RECEIVER_PROFILES[q.get("profile") ?? ""];
+    if (prof && state.organizations.some((o) => o.id === prof.orgId)) {
+      setKind(prof.transferKinds.includes("provider-move") ? "provider-move" : prof.transferKinds[0]);
+      setProfileChoice(prof.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!open)
     return (

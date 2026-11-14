@@ -8,6 +8,7 @@ import { isOverdue, organization, practitioner, transferBlockers } from "@/core/
 import type { DemoState, TransferEpisode } from "@/core/types";
 import { computePipeline } from "@/metrics/dashboard";
 import { getPack } from "@/packs";
+import { preferencesFor } from "./providerCatalogue";
 
 export interface TodoItem {
   id: string;
@@ -22,6 +23,8 @@ export interface TodoItem {
   dueLabel: string;
   button: string;
   href: string;
+  /** Read-only provider comparison, when the fictional catalogue covers this patient and the sending team still holds the handover. */
+  compareHref?: string;
 }
 
 const hours = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 3_600_000);
@@ -35,6 +38,7 @@ export function todoItems(state: DemoState): TodoItem[] {
       patientName: pt?.displayName ?? t.patientId,
       nhsNumber: pt?.nhsNumber ?? "—",
       href: `/hub?t=${encodeURIComponent(t.id)}`,
+      compareHref: preferencesFor(t.patientId) && t.status !== "accepted" ? `/compare?p=${encodeURIComponent(t.patientId)}` : undefined,
     };
   };
   const sender = (t: TransferEpisode) =>

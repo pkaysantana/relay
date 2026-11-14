@@ -80,6 +80,13 @@ Create `src/packs/<name>.ts` exporting a `PathwayPack`, add it to `PACKS` in `sr
 - Dashboard pipeline (`computePipeline`): awaiting information / ready to send / sent, not accepted / accepted / rejected / accepted but awaiting appointment (with the escalation contact) / completed actions with evidence.
 - Open clinical questions for the clinical lead are listed in the Prompt 3 report. Every clinical assumption is labelled "Illustrative — pending clinician sign-off".
 
+## Provider comparison (`/compare`)
+- `src/relay/shortlist.ts` (pure) + `src/relay/providerCatalogue.ts` (fictional catalogue, preferences, documented requirements). Administrative decision support only — no ML, no clinical triage.
+- Layer A first: preference conflicts, missing info (unknown stays unknown), capacity status, and "Capability requires clinical review" flags raised only from requirements quoted verbatim from the synthetic record. Flagged providers are not positioned and not excluded.
+- Layer B: illustrative score = weighted sum of min–max normalised wait, distance and the share of known non-clinical preferences met. Weights depend on the patient's stated priority and are demonstration assumptions. Ties break on wait, then distance, then id.
+- `proposeDestination()` only returns a link into `/hub` (capture pre-selected, or the returned handover with the redirect profile pre-selected). It never dispatches a command. Agreement, clinical confirmation, sign-off and `transferBlockers()` are unchanged.
+- Do not add suitability rules, real provider data or automatic rerouting here.
+
 ## Demo scenarios (Reset demo restores them; all built through the handover flow)
 **Cataract set** (`src/scenarios/cataract.ts`, documents in `src/data/cataractDocuments.ts`): cat-A accepted, booking recorded, surgery open · cat-B GA-documented case rejected by Brookfield, sender keeps it · cat-C accepted, booking review deadline passed (escalate to Priya Shah) · cat-D laterality right vs left across two documents, unsent · live E = capture cdoc-E (laterality missing, agreement "To be confirmed").
 

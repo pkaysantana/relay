@@ -405,6 +405,11 @@ function RedirectStep({ state, transfer, actorId }: { state: DemoState; transfer
   const [profileId, setProfileId] = useState("");
   const kind = transfer.handover?.transferKind;
   const profiles = kind ? listReceiverProfiles(kind, state.organizations.map((o) => o.id)).filter((x) => x.orgId !== transfer.receivingOrgId && x.orgId !== transfer.sendingOrgId) : [];
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("profile");
+    if (p && profiles.some((x) => x.id === p)) setProfileId(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   if (transfer.handover)
     return (
       <section className="card border-red-300">

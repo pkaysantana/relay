@@ -11,6 +11,21 @@ Everything shown is synthetic. Clinical requirements are illustrative and pendin
 2. In the header, check that **Demo:** shows "Cataract: NHS eye service → independent provider". Click **Reset demo**, then **Confirm reset**.
    → The demo clock reads **Sat 14 Nov, 09:30**. "Outgoing transfers (sender view)" lists A, B, C and D.
 
+## Compare providers (new; UNVERIFIED in a browser; logic covered by `tests/shortlist.test.ts`)
+All waits, distances, capabilities and availability on this screen are simulated. Relay does not choose a provider or judge clinical fitness.
+
+P1. Sidebar → **Compare providers** (`/compare`). The default is *Synthetic Patient K — Case 1 — wait versus distance*, with preferences "✓ Confirmed with patient" (max 40 km, "Shorter wait matters more").
+   → **Compared (4)**: **#1 Brookfield Eye Centre** (6 weeks, 32 km, "? Capacity unconfirmed", score 0.842), #2 Westmoor (14 weeks, 12 km), #3 Ashdown (4 weeks, 55 km, "✕ Conflict: Beyond the stated travel limit (55 km > 40 km)"), #4 Northgate (current provider, 22 weeks). **Not compared (1)**: Lakeside, "✕ Not currently available (simulated)".
+P2. **Order by** → **Soonest simulated wait** puts Ashdown first. **Shortest simulated distance** puts Northgate first. Return to **Illustrative preference score**.
+P3. On Brookfield, click **Propose for discussion**. A box appears: "Proposed for discussion: Brookfield… It is not patient agreement and nothing has been sent." Click **Start a handover to this provider**.
+   → `/hub` opens with the capture form already open: Patient K's document ticked, Patient K selected, kind "Treatment transfer between providers", profile Brookfield. Nothing has been created yet. Continue from step 4 below (**Extract and create draft**). Laterality is still RED and agreement still AMBER.
+P4. Patient selector → *Synthetic Patient J — Case 2 — access requirements* (max 15 km, needs transport, step-free access).
+   → #1 Westmoor, #2 Northgate, #3 Brookfield with two conflicts (beyond the travel limit; needs transport, provider declares none), #4 Ashdown.
+P5. Patient selector → *Synthetic Patient G — Case 3 — clinical uncertainty*. Preferences show "! Not yet confirmed with patient", with the notes box above the list. "Clinician-documented requirements" quotes the general anaesthesia line from the transfer package.
+   → **Capability requires clinical review (1)**: Brookfield, not numbered, "⚠ Capability requires clinical review: General anaesthesia is documented for this patient; this provider declares it is not available on site." **Compared (2)**: Northgate, Westmoor. **Not compared (2)**: Ashdown (distance not known), Lakeside.
+   → **Propose for discussion** on Westmoor → **Open the returned handover** → `/hub` shows handover B with "Redirect to (receiver profile)" pre-set to Westmoor. Nothing is sent until someone clicks **Redirect transfer** and enters a note.
+P6. From **To do**, the cards for Patient G and Patient J have a **Compare providers** button that opens the same screen for that patient.
+
 ## Scenario E: live demo (sending side, `/hub`)
 3. Click **+ Capture a new handover**.
    → Pre-filled: "1. Source documents (synthetic)" has *Cataract transfer package — Synthetic Patient K (live demo)* ticked. 2. Patient = *Synthetic Patient K · NHS 999 100 0005*. 3. Transfer kind = *Treatment transfer between providers*. 4. Receiving-service profile = *Brookfield Eye Centre — NHS-funded independent cataract provider (synthetic)…*. 5. Responsible sending professional = *Mr Tomas Reyes (consultant ophthalmologist) — ophthalmologist*. 6. Captured by = *Priya Shah (elective pathway coordinator) — pathway-coordinator*.
