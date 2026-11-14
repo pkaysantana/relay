@@ -8,7 +8,7 @@ import { apply, type Command } from "@/core/engine";
 import type { DemoState } from "@/core/types";
 import { createSeedState } from "@/scenarios/seed";
 
-const KEY = "doorstep:demo-state:v1";
+const KEY = "doorstep:demo-state:v2"; // bumped: Prompt 2 handover model
 const listeners = new Set<() => void>();
 let seed: DemoState | null = null;
 let current: DemoState | null = null;
@@ -22,7 +22,7 @@ function load(): DemoState {
   try {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(KEY) : null;
     const parsed = raw ? (JSON.parse(raw) as DemoState) : null;
-    current = parsed && parsed.schemaVersion === 1 ? parsed : getSeed();
+    current = parsed && parsed.schemaVersion === 1 && Array.isArray(parsed.documents) ? parsed : getSeed();
   } catch {
     current = getSeed();
   }
@@ -78,4 +78,9 @@ export function useCommand() {
     return r.ok;
   }, []);
   return { run, error, clearError: () => setError(null) };
+}
+
+/** Current state outside React (tests, event handlers). */
+export function getDemoState(): DemoState {
+  return load();
 }

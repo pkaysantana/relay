@@ -4,7 +4,8 @@
  * Invalid commands return { ok: false, error } and never change state.
  *
  * Invariants (see tests/):
- *  - A transfer cannot be accepted without a named receiving professional and complete required info.
+ *  - A transfer cannot be signed off, sent or accepted while transferBlockers() is non-empty
+ *    (receiver-profile validation incl. identity, or legacy pack fields). Accepting also needs a named professional.
  *  - A task cannot be accepted without a named owner.
  *  - Nothing becomes "completed" except an in-progress task with recorded evidence.
  *  - Time passing never changes a status. Overdue is derived (selectors.isOverdue).
@@ -13,22 +14,49 @@
  *
  * OWNER: core model & state transitions.
  */
-import { getPack } from "@/packs";
-import { missingRequiredFields } from "./selectors";
+import { DEFAULT_PACK_ID, getPack } from "@/packs";
+import { FIELD_BY_KEY } from "@/packs/fields";
+import { getReceiverProfile, RECEIVER_PROFILES } from "@/packs/receivers";
+import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
+import type { ExtractedField } from "@/extraction/labelledParser";
+import { handoverValidation, missingRequiredFields, transferBlockers } from "./selectors";
+import { formatProblem, hasConflict } from "./validation";
 import type {
   CareTask,
   DemoState,
   DomainEvent,
+  EntryMethod,
   Evidence,
+  HandoverField,
   Id,
   ISODateTime,
   TaskStatus,
   TransferEpisode,
+  TransferKind,
 } from "./types";
 
 export type Command =
   | { type: "advanceClock"; actorId: Id; hours: number }
   | { type: "confirmSenderInfo"; actorId: Id; transferId: Id; fields: Record<string, string> }
+  | {
+      type: "createHandover";
+      actorId: Id;
+      /** Optional fixed id (seeds); otherwise allocated. */
+      transferId?: Id;
+      patientId: Id;
+      sendingPractitionerId: Id;
+      transferKind: TransferKind;
+      receiverProfileId: string;
+      packId?: string;
+      documents: { id: Id; title: string; text: string }[];
+      /** Extractor output. Quotes are verified verbatim against the documents. */
+      extracted: ExtractedField[];
+      entryMethod?: EntryMethod;
+      warnings?: string[];
+    }
+  | { type: "updateHandoverField"; actorId: Id; transferId: Id; key: string; value: string }
+  | { type: "confirmHandoverField"; actorId: Id; transferId: Id; key: string }
+  | { type: "recordIdentityCheck"; actorId: Id; transferId: Id; note: string }
   | { type: "generateHandover"; actorId: Id; transferId: Id }
   | {
       type: "sendTransfer";
@@ -235,12 +263,177 @@ function run(s: DemoState, cmd: Command): void {
       const t = getTransfer(s, cmd.transferId);
       requireActorInOrg(s, cmd.actorId, t.sendingOrgId, "sending");
       requireTransferStatus(t, ["draft", "info-confirmed"]);
-      t.fields = { ...t.fields, ...cmd.fields };
+      const a = actor(s, cmd.actorId)!;
+      if (t.handover) {
+        // Handover sign-off: every receiver-required field GREEN and identity resolved.
+        if (Object.keys(cmd.fields ?? {}).length)
+          fail("Handover fields are edited field by field, not via sign-off");
+        const kind = TRANSFER_KIND_CONFIG[t.handover.transferKind];
+        if (!kind.signOffRoles.includes(a.role))
+          fail(`Sign-off for a ${kind.label.toLowerCase()} needs one of these roles: ${kind.signOffRoles.join(", ")}`);
+        const blockers = transferBlockers(s, t);
+        if (blockers.length) fail(`Cannot sign off: ${blockers.join("; ")}`);
+      } else {
+        t.fields = { ...t.fields, ...cmd.fields };
+      }
       t.senderConfirmedBy = cmd.actorId;
+      t.senderConfirmedRole = a.role;
       t.senderConfirmedAt = s.now;
       setTransferStatus(s, t, "info-confirmed", cmd.actorId, cmd.type, {
-        data: { missingFields: missingRequiredFields(t) },
+        data: { missingFields: missingRequiredFields(t), role: a.role },
       });
+      return;
+    }
+
+    case "createHandover": {
+      const patient = s.patients.find((p) => p.id === cmd.patientId) ?? fail("Choose the patient");
+      const sender = s.practitioners.find((p) => p.id === cmd.sendingPractitionerId) ?? fail("Choose the responsible sending professional");
+      actor(s, cmd.actorId);
+      const profile = RECEIVER_PROFILES[cmd.receiverProfileId] ?? fail("Choose a receiver profile");
+      if (!profile.transferKinds.includes(cmd.transferKind))
+        fail(`${profile.name} does not accept a ${TRANSFER_KIND_CONFIG[cmd.transferKind]?.label ?? cmd.transferKind}`);
+      if (sender.orgId === profile.orgId) fail("Sender and receiver must be different organisations");
+      if (cmd.documents.length === 0) fail("Add at least one source document");
+      const id = cmd.transferId ?? newId(s, "tr");
+      if (s.transfers.some((t) => t.id === id)) fail(`Transfer ${id} already exists`);
+
+      for (const d of cmd.documents) {
+        if (!d.text.trim()) fail(`Document "${d.title}" is empty`);
+        const existing = s.documents.find((x) => x.id === d.id);
+        if (existing && existing.text !== d.text) fail(`Document id ${d.id} already used for different text`);
+        if (!existing) s.documents.push({ id: d.id, title: d.title, text: d.text, addedAt: s.now });
+      }
+      // Provenance guard: every quote must exist verbatim at its offsets in a supplied document.
+      const fields: Record<string, HandoverField> = {};
+      for (const x of cmd.extracted) {
+        const doc = cmd.documents.find((d) => d.id === x.evidence.documentId);
+        if (!doc || doc.text.slice(x.evidence.start, x.evidence.end) !== x.evidence.quote)
+          fail(`Evidence for "${x.key}" is not a verbatim quote from its source document`);
+        if (!FIELD_BY_KEY[x.key]) fail(`Unknown field ${x.key}`);
+        const f = fields[x.key];
+        if (f) {
+          f.evidence.push(x.evidence);
+          if (x.ambiguity) f.ambiguity = [f.ambiguity, x.ambiguity].filter(Boolean).join("; ");
+        } else {
+          fields[x.key] = {
+            key: x.key,
+            value: x.value,
+            entryMethod: cmd.entryMethod ?? "deterministic-extraction",
+            evidence: [x.evidence],
+            ambiguity: x.ambiguity,
+            updatedBy: cmd.actorId,
+            updatedAt: s.now,
+          };
+        }
+      }
+      const t: TransferEpisode = {
+        id,
+        patientId: patient.id,
+        packId: cmd.packId ?? DEFAULT_PACK_ID,
+        sendingOrgId: sender.orgId,
+        sendingPractitionerId: sender.id,
+        plannedDischargeAt: s.now,
+        fields: Object.fromEntries(Object.values(fields).map((f) => [f.key, f.value])),
+        status: "draft",
+        decisions: [],
+        handover: {
+          transferKind: cmd.transferKind,
+          receiverProfileId: profile.id,
+          documentIds: cmd.documents.map((d) => d.id),
+          fields,
+          extractionWarnings: cmd.warnings ?? [],
+        },
+      };
+      s.transfers.push(t);
+      const v = handoverValidation(s, t)!;
+      emit(s, {
+        actorId: cmd.actorId,
+        type: cmd.type,
+        transferId: t.id,
+        toStatus: "draft",
+        data: {
+          transferKind: cmd.transferKind,
+          receiverProfileId: profile.id,
+          profileVersion: profile.version,
+          documentIds: t.handover!.documentIds,
+          // Snapshot for the dashboard: what was missing/unconfirmed at capture.
+          missingRequired: v.fields.filter((f) => f.required && !fields[f.key]?.value.trim()).map((f) => f.key),
+          contradictoryRequired: v.fields.filter((f) => f.required && f.status === "red" && !!fields[f.key]?.value.trim()).map((f) => f.key),
+          unconfirmedRequired: v.fields.filter((f) => f.required && f.status === "amber").map((f) => f.key),
+          identity: v.identity.status,
+        },
+      });
+      return;
+    }
+
+    case "updateHandoverField": {
+      const t = getTransfer(s, cmd.transferId);
+      const h = t.handover ?? fail("Not an evidence-aware handover");
+      requireActorInOrg(s, cmd.actorId, t.sendingOrgId, "sending");
+      requireTransferStatus(t, ["draft", "info-confirmed", "clarification-requested"]);
+      if (!FIELD_BY_KEY[cmd.key]) fail(`Unknown field ${cmd.key}`);
+      const prev = h.fields[cmd.key];
+      const value = (cmd.value ?? "").trim();
+      if (value) {
+        // Manual entry: human origin recorded, no document quotation attached.
+        h.fields[cmd.key] = { key: cmd.key, value, entryMethod: "manual", evidence: [], updatedBy: cmd.actorId, updatedAt: s.now };
+        t.fields[cmd.key] = value;
+      } else {
+        delete h.fields[cmd.key];
+        delete t.fields[cmd.key];
+      }
+      emit(s, {
+        actorId: cmd.actorId,
+        type: cmd.type,
+        transferId: t.id,
+        note: `${FIELD_BY_KEY[cmd.key].label}: "${prev?.value ?? ""}" → "${value}"`,
+        data: { key: cmd.key, previousValue: prev?.value, previousEntryMethod: prev?.entryMethod, previousEvidence: prev?.evidence ?? [], value },
+      });
+      if (t.status === "info-confirmed") {
+        t.senderConfirmedBy = undefined;
+        t.senderConfirmedAt = undefined;
+        setTransferStatus(s, t, "draft", cmd.actorId, cmd.type, { note: "Sign-off withdrawn: handover changed" });
+      }
+      return;
+    }
+
+    case "confirmHandoverField": {
+      const t = getTransfer(s, cmd.transferId);
+      const h = t.handover ?? fail("Not an evidence-aware handover");
+      requireActorInOrg(s, cmd.actorId, t.sendingOrgId, "sending");
+      requireTransferStatus(t, ["draft", "clarification-requested"]);
+      const f = h.fields[cmd.key];
+      if (!f || !f.value.trim()) fail("Nothing to confirm — the field is empty");
+      if (hasConflict(f!)) fail("Sources disagree: enter the correct value before confirming");
+      const problem = formatProblem(cmd.key, f!.value);
+      if (problem) fail(`${problem}: correct it before confirming`);
+      const a = actor(s, cmd.actorId)!;
+      f!.confirmedBy = a.id;
+      f!.confirmedRole = a.role;
+      f!.confirmedAt = s.now;
+      emit(s, {
+        actorId: cmd.actorId,
+        type: cmd.type,
+        transferId: t.id,
+        note: `${FIELD_BY_KEY[cmd.key]?.label ?? cmd.key} confirmed`,
+        data: { key: cmd.key, value: f!.value, entryMethod: f!.entryMethod, role: a.role },
+      });
+      return;
+    }
+
+    case "recordIdentityCheck": {
+      const t = getTransfer(s, cmd.transferId);
+      const h = t.handover ?? fail("Not an evidence-aware handover");
+      requireActorInOrg(s, cmd.actorId, t.sendingOrgId, "sending");
+      requireTransferStatus(t, ["draft", "clarification-requested"]);
+      const note = requireText(cmd.note, "A note describing how identity was checked");
+      const v = handoverValidation(s, t)!;
+      if (v.identity.status === "mismatch") fail("Identifiers disagree — a mismatch cannot be overridden. Correct the identifiers or the documents.");
+      if (v.identity.status === "match") fail("Identifiers already match; no manual check needed");
+      if (!getReceiverProfile(h.receiverProfileId).constraints.allowManualIdentityCheck)
+        fail("This receiver profile does not allow a manual identity check");
+      h.identityCheck = { by: cmd.actorId, at: s.now, note };
+      emit(s, { actorId: cmd.actorId, type: cmd.type, transferId: t.id, note });
       return;
     }
 
@@ -283,6 +476,14 @@ function run(s: DemoState, cmd: Command): void {
       requireTransferStatus(t, ["handover-ready"]);
       const org = s.organizations.find((o) => o.id === cmd.receivingOrgId);
       if (!org || org.id === t.sendingOrgId) fail("Choose a receiving organisation");
+      // Send rule: nothing is sent while any receiver-required field is not GREEN or identity is open.
+      const blockers = transferBlockers(s, t);
+      if (blockers.length) fail(`Cannot send: ${blockers.join("; ")}`);
+      if (t.handover) {
+        const profile = getReceiverProfile(t.handover.receiverProfileId);
+        if (org!.id !== profile.orgId)
+          fail(`This handover was prepared for ${profile.name}; send it to that service or change the profile`);
+      }
       const drafts = s.tasks.filter((k) => k.transferId === t.id && k.status === "draft");
       if (drafts.length === 0) fail("No actions to send");
       for (const k of drafts) {
@@ -319,8 +520,8 @@ function run(s: DemoState, cmd: Command): void {
       const t = getTransfer(s, cmd.transferId);
       requireActorInOrg(s, cmd.actorId, t.receivingOrgId, "receiving");
       requireTransferStatus(t, ["received"]);
-      const missing = missingRequiredFields(t);
-      if (missing.length) fail(`Cannot accept: required information missing (${missing.join(", ")})`);
+      const blockers = transferBlockers(s, t);
+      if (blockers.length) fail(`Cannot accept: ${blockers.join("; ")}`);
       const resp = s.practitioners.find((p) => p.id === cmd.responsiblePractitionerId);
       if (!resp) fail("Cannot accept without naming the responsible professional");
       if (resp!.orgId !== t.receivingOrgId)
@@ -378,7 +579,13 @@ function run(s: DemoState, cmd: Command): void {
       requireActorInOrg(s, cmd.actorId, t.sendingOrgId, "sending");
       requireTransferStatus(t, ["clarification-requested"]);
       const note = requireText(cmd.note, "A clarification note");
-      t.fields = { ...t.fields, ...cmd.fields };
+      if (t.handover) {
+        if (Object.keys(cmd.fields ?? {}).length) fail("Handover fields are edited field by field");
+      } else {
+        t.fields = { ...t.fields, ...cmd.fields };
+      }
+      const blockers = transferBlockers(s, t);
+      if (blockers.length) fail(`Cannot return the handover yet: ${blockers.join("; ")}`);
       t.clarificationQuestion = undefined;
       setTransferStatus(s, t, "received", cmd.actorId, cmd.type, {
         note,
@@ -424,8 +631,8 @@ function run(s: DemoState, cmd: Command): void {
     case "acceptTask": {
       const k = getTask(s, cmd.taskId);
       requireActorInOrg(s, cmd.actorId, k.ownerOrgId, "receiving");
-      const missing = missingRequiredFields(getTransfer(s, k.transferId));
-      if (missing.length) fail(`Cannot accept: required information missing (${missing.join(", ")})`);
+      const blockers = transferBlockers(s, getTransfer(s, k.transferId));
+      if (blockers.length) fail(`Cannot accept: ${blockers.join("; ")}`);
       const owner = s.practitioners.find((p) => p.id === cmd.ownerPractitionerId);
       if (!owner) fail("Cannot accept a task without naming its owner");
       if (owner!.orgId !== k.ownerOrgId) fail("Owner must belong to the receiving organisation");

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
-  missingRequiredFields,
+  transferBlockers,
   organization,
   patient,
   practitioner,
@@ -11,6 +11,9 @@ import type { DemoState, TransferEpisode } from "@/core/types";
 import { getPack } from "@/packs";
 import { useCommand, useDemoState } from "@/state/store";
 import { TaskCard } from "@/components/TaskCard";
+import { EventLog } from "@/components/EventLog";
+import { HandoverPanel, SignOffSummary } from "@/components/HandoverPanel";
+import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
 import { TransferList } from "@/components/TransferList";
 import { ErrorAlert, fmt, Select, TextAction, TransferStatusBadge } from "@/components/ui";
 
@@ -74,7 +77,7 @@ function ReceiverDetail({
   const [responsible, setResponsible] = useState("");
   const pack = getPack(transfer.packId);
   const p = patient(state, transfer.patientId)!;
-  const missing = missingRequiredFields(transfer);
+  const blockers = transferBlockers(state, transfer);
   const isReceiver = transfer.receivingOrgId === orgId;
   const tasks = state.tasks.filter((k) => k.transferId === transfer.id && k.ownerOrgId === orgId);
   const staff = state.practitioners.filter((x) => x.orgId === orgId);
@@ -89,22 +92,35 @@ function ReceiverDetail({
           <TransferStatusBadge status={transfer.status} label={transferStatusLabel(transfer)} />
         </div>
         <p className="text-sm mt-1">
+          {transfer.handover ? `${TRANSFER_KIND_CONFIG[transfer.handover.transferKind].label} · ` : ""}
           From {practitioner(state, transfer.sendingPractitionerId)?.name}, {organization(state, transfer.sendingOrgId)?.name} · sent {fmt(transfer.initiatedAt)}
         </p>
-        {missing.length > 0 && (
-          <p role="status" className="mt-2 rounded bg-amber-100 px-2 py-1 text-sm text-amber-950">
-            ⚠ Required information missing: {missing.map((k) => pack.requiredFields.find((f) => f.key === k)?.label).join("; ")}. Request clarification or reject. Acceptance is blocked.
+        {transfer.handover && <SignOffSummary state={state} transfer={transfer} />}
+        {transfer.handover && transfer.status === "accepted" && (
+          <p className="mt-1 text-xs text-slate-600">{TRANSFER_KIND_CONFIG[transfer.handover.transferKind].simulatedNextStep}</p>
+        )}
+        {blockers.length > 0 && (
+          <div role="status" className="mt-2 rounded bg-amber-100 px-2 py-1 text-sm text-amber-950">
+            ⚠ Acceptance is blocked: {blockers.join("; ")}. Request clarification or reject.
+          </div>
+        )}
+        {!transfer.handover && (
+          <dl className="mt-3 grid grid-cols-1 sm:grid-cols-[14rem_1fr] gap-x-4 gap-y-1 text-sm">
+            {[...pack.requiredFields, ...pack.extraFields].map((f) => (
+              <div key={f.key} className="contents">
+                <dt className="text-slate-600">{f.label}</dt>
+                <dd>{transfer.fields[f.key]?.trim() || <em className="text-red-800">Not provided</em>}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {transfer.status === "received" && (
+          <p className="mt-2 text-xs text-slate-700">
+            Complete information is not clinical acceptance. Accepting means a named professional here takes responsibility.
           </p>
         )}
-        <dl className="mt-3 grid grid-cols-1 sm:grid-cols-[14rem_1fr] gap-x-4 gap-y-1 text-sm">
-          {[...pack.requiredFields, ...pack.extraFields].map((f) => (
-            <div key={f.key} className="contents">
-              <dt className="text-slate-600">{f.label}</dt>
-              <dd>{transfer.fields[f.key]?.trim() || <em className="text-red-800">Not provided</em>}</dd>
-            </div>
-          ))}
-        </dl>
       </section>
+      {transfer.handover && <HandoverPanel state={state} transfer={transfer} mode="receiver" actorId={actorId} />}
 
       {isReceiver && ["sent", "received", "clarification-requested"].includes(transfer.status) && (
         <section className="card space-y-3" aria-label="Decision on responsibility">
@@ -167,6 +183,7 @@ function ReceiverDetail({
           {tasks.length === 0 && <li className="text-sm text-slate-600">None.</li>}
         </ul>
       </section>
+      <EventLog state={state} transferId={transfer.id} title="History of this transfer" />
     </div>
   );
 }

@@ -4,35 +4,35 @@ import { attentionReasons, isOutstanding, isOverdue } from "@/core/selectors";
 import { computeMetrics, NO_ACCEPTING_TEAM } from "@/metrics/dashboard";
 import { toFhirBundle } from "@/fhir/toFhir";
 import { createSeedState } from "@/scenarios/seed";
-import { err, ok, receivedD, seed, task, transfer } from "./helpers";
+import { err, ok, receivedE, seed, task, transfer } from "./helpers";
 
 describe("1. missing responsibility is never silently treated as accepted", () => {
   it("refuses transfer acceptance without a named responsible professional", () => {
-    const s = receivedD();
-    expect(err(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-D" })).toMatch(/responsible professional/);
-    expect(transfer(s, "tr-D").status).toBe("received");
+    const s = receivedE();
+    expect(err(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-E" })).toMatch(/responsible professional/);
+    expect(transfer(s, "tr-E").status).toBe("received");
   });
 
   it("refuses a responsible professional from another organisation", () => {
-    const s = receivedD();
+    const s = receivedE();
     expect(
-      err(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-D", responsiblePractitionerId: "prac-gp-1" }),
+      err(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-E", responsiblePractitionerId: "prac-gp-1" }),
     ).toMatch(/receiving organisation/);
   });
 
-  it("refuses acceptance while required information is missing", () => {
-    let s = seed();
-    s = ok(s, { type: "redirectTransfer", actorId: "prac-ward-1", transferId: "tr-B", receivingOrgId: "org-community", note: "Redirecting to community nursing" });
-    s = ok(s, { type: "acknowledgeTransfer", actorId: "prac-cn-1", transferId: "tr-B" });
+  it("acceptance re-checks the receiver requirements (guard is in the engine, not only at send)", () => {
+    const s = structuredClone(receivedE());
+    // Simulate a required field losing its confirmation after sending.
+    delete transfer(s, "tr-E").handover!.fields.allergies.confirmedBy;
     expect(
-      err(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-B", responsiblePractitionerId: "prac-cn-1" }),
-    ).toMatch(/required information missing/);
+      err(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-E", responsiblePractitionerId: "prac-cn-1" }),
+    ).toMatch(/Cannot accept: Allergies/);
   });
 
   it("acknowledgement is not acceptance, and tasks stay unassigned", () => {
-    const s = receivedD();
-    expect(transfer(s, "tr-D").status).toBe("received");
-    for (const k of s.tasks.filter((k) => k.transferId === "tr-D")) {
+    const s = receivedE();
+    expect(transfer(s, "tr-E").status).toBe("received");
+    for (const k of s.tasks.filter((k) => k.transferId === "tr-E")) {
       expect(k.status).toBe("received");
       expect(k.ownerPractitionerId).toBeUndefined();
       expect(attentionReasons(k, s.now)).toContain("unassigned");
@@ -40,36 +40,36 @@ describe("1. missing responsibility is never silently treated as accepted", () =
   });
 
   it("refuses task acceptance without a named owner", () => {
-    const s = receivedD();
-    const k = task(s, "tr-D", "first-contact");
+    const s = receivedE();
+    const k = task(s, "tr-E", "first-contact");
     expect(err(s, { type: "acceptTask", actorId: "prac-cn-1", taskId: k.id })).toMatch(/owner/);
   });
 });
 
 describe("2. requested/accepted tasks cannot automatically become completed", () => {
   it("refuses completing a received or accepted task", () => {
-    let s = receivedD();
-    const id = task(s, "tr-D", "first-contact").id;
+    let s = receivedE();
+    const id = task(s, "tr-E", "first-contact").id;
     const evidence = { summary: "Visit done", kind: "contact-note" as const };
     expect(err(s, { type: "completeTask", actorId: "prac-cn-1", taskId: id, evidence })).toMatch(/in-progress/);
-    s = ok(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-D", responsiblePractitionerId: "prac-cn-1" });
-    expect(task(s, "tr-D", "first-contact").status).toBe("accepted");
+    s = ok(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-E", responsiblePractitionerId: "prac-cn-1" });
+    expect(task(s, "tr-E", "first-contact").status).toBe("accepted");
     expect(err(s, { type: "completeTask", actorId: "prac-cn-1", taskId: id, evidence })).toMatch(/in-progress/);
   });
 
   it("scheduling and time passing do not complete a task", () => {
-    let s = receivedD();
-    s = ok(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-D", responsiblePractitionerId: "prac-cn-1" });
-    const id = task(s, "tr-D", "first-contact").id;
+    let s = receivedE();
+    s = ok(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-E", responsiblePractitionerId: "prac-cn-1" });
+    const id = task(s, "tr-E", "first-contact").id;
     s = ok(s, { type: "scheduleTask", actorId: "prac-cn-1", taskId: id, scheduledFor: s.now });
     s = ok(s, { type: "advanceClock", actorId: SYSTEM_ACTOR, hours: 200 });
-    expect(task(s, "tr-D", "first-contact").status).toBe("accepted");
+    expect(task(s, "tr-E", "first-contact").status).toBe("accepted");
   });
 
   it("refuses completion without evidence", () => {
-    let s = receivedD();
-    s = ok(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-D", responsiblePractitionerId: "prac-cn-1" });
-    const id = task(s, "tr-D", "first-contact").id;
+    let s = receivedE();
+    s = ok(s, { type: "acceptTransfer", actorId: "prac-cn-1", transferId: "tr-E", responsiblePractitionerId: "prac-cn-1" });
+    const id = task(s, "tr-E", "first-contact").id;
     s = ok(s, { type: "startTask", actorId: "prac-cn-1", taskId: id });
     expect(err(s, { type: "completeTask", actorId: "prac-cn-1", taskId: id, evidence: { summary: " ", kind: "other" } })).toMatch(/Evidence/);
   });
@@ -130,8 +130,8 @@ describe("4. rejected tasks require reassignment or another explicit action", ()
   it("reassignment returns the task to requested with no owner until re-accepted", () => {
     let s = seed();
     const id = task(s, "tr-B", "first-contact").id;
-    expect(err(s, { type: "reassignTask", actorId: "prac-ward-1", taskId: id, ownerOrgId: "org-community", reason: "" })).toMatch(/reason/);
-    s = ok(s, { type: "reassignTask", actorId: "prac-ward-1", taskId: id, ownerOrgId: "org-community", reason: "Community nursing has capacity" });
+    expect(err(s, { type: "reassignTask", actorId: "prac-gp-1", taskId: id, ownerOrgId: "org-community", reason: "" })).toMatch(/reason/);
+    s = ok(s, { type: "reassignTask", actorId: "prac-gp-1", taskId: id, ownerOrgId: "org-community", reason: "Community nursing has capacity" });
     const k = task(s, "tr-B", "first-contact");
     expect(k.status).toBe("requested");
     expect(k.ownerOrgId).toBe("org-community");
@@ -141,7 +141,7 @@ describe("4. rejected tasks require reassignment or another explicit action", ()
   it("cancellation is explicit and needs a reason", () => {
     let s = seed();
     const id = task(s, "tr-B", "agree-plan").id;
-    s = ok(s, { type: "cancelTask", actorId: "prac-ward-1", taskId: id, reason: "Plan agreed before discharge" });
+    s = ok(s, { type: "cancelTask", actorId: "prac-gp-1", taskId: id, reason: "Plan agreed before discharge" });
     expect(task(s, "tr-B", "agree-plan").status).toBe("cancelled");
   });
 });

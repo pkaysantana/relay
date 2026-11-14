@@ -42,7 +42,56 @@ export const TRANSFER_STATUSES = [
 ] as const;
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
 
-export type OrgType = "acute" | "community" | "primary-care" | "social-care";
+export type OrgType = "acute" | "community" | "primary-care" | "social-care" | "specialist";
+
+/** Transfer context only — not clinical eligibility and not the decision to transfer. */
+export const TRANSFER_KINDS = ["discharge", "referral", "provider-move"] as const;
+export type TransferKind = (typeof TRANSFER_KINDS)[number];
+
+/** A synthetic source document (prepared or pasted). Never real patient data. */
+export interface SourceDocument {
+  id: Id;
+  title: string;
+  text: string;
+  addedAt: ISODateTime;
+}
+
+/** Verbatim support for a value: quote === document.text.slice(start, end). */
+export interface FieldEvidence {
+  documentId: Id;
+  quote: string;
+  start: number;
+  end: number;
+  /** Normalised value read from this quote. */
+  value: string;
+}
+
+export type EntryMethod = "manual" | "deterministic-extraction" | "ai-extraction";
+
+export interface HandoverField {
+  key: string;
+  value: string;
+  entryMethod: EntryMethod;
+  /** Empty for manual entries — never fabricate a quotation. >1 distinct values = conflict. */
+  evidence: FieldEvidence[];
+  /** Why the extractor considered the value ambiguous (e.g. "TBC"). */
+  ambiguity?: string;
+  confirmedBy?: Id;
+  confirmedRole?: string;
+  confirmedAt?: ISODateTime;
+  updatedBy: Id;
+  updatedAt: ISODateTime;
+}
+
+export interface Handover {
+  transferKind: TransferKind;
+  receiverProfileId: string;
+  documentIds: Id[];
+  fields: Record<string, HandoverField>;
+  extractionWarnings: string[];
+  /** Manual identity check, only permitted when identifiers are absent (never overrides a mismatch). */
+  identityCheck?: { by: Id; at: ISODateTime; note: string };
+}
 
 export interface Organization {
   id: Id;
@@ -65,6 +114,10 @@ export interface Patient {
   syntheticId: string;
   displayName: string;
   birthYear: number;
+  /** Synthetic NHS-number-shaped identifier (999 test range). */
+  nhsNumber?: string;
+  /** ISO date YYYY-MM-DD. */
+  birthDate?: string;
 }
 
 export interface Evidence {
@@ -122,6 +175,9 @@ export interface TransferEpisode {
   acceptedAt?: ISODateTime;
   decisions: TransferDecision[];
   clarificationQuestion?: string;
+  /** Evidence-aware handover validated against a receiver profile. Absent = legacy pack-field transfer. */
+  handover?: Handover;
+  senderConfirmedRole?: string;
 }
 
 export interface CareTask {
@@ -174,6 +230,7 @@ export interface DemoState {
   organizations: Organization[];
   practitioners: Practitioner[];
   patients: Patient[];
+  documents: SourceDocument[];
   transfers: TransferEpisode[];
   tasks: CareTask[];
   events: DomainEvent[];

@@ -1,6 +1,8 @@
 /** Pure read-side helpers. Derived facts (overdue, needs-action) are computed, never stored. */
 import type { CareTask, DemoState, TaskStatus, TransferEpisode } from "./types";
 import { getPack } from "@/packs";
+import { getReceiverProfile } from "@/packs/receivers";
+import { validateHandover, type HandoverValidation } from "./validation";
 
 export const TERMINAL_TASK_STATUSES: TaskStatus[] = ["completed", "cancelled"];
 
@@ -40,6 +42,30 @@ export function missingRequiredFields(transfer: TransferEpisode): string[] {
   return pack.requiredFields
     .filter((f) => !(transfer.fields[f.key] ?? "").trim())
     .map((f) => f.key);
+}
+
+/** Receiver validation for an evidence-aware handover (undefined for legacy pack-field transfers). */
+export function handoverValidation(state: DemoState, t: TransferEpisode): HandoverValidation | undefined {
+  if (!t.handover) return undefined;
+  return validateHandover(
+    t.handover,
+    getReceiverProfile(t.handover.receiverProfileId),
+    state.patients.find((p) => p.id === t.patientId),
+    state.documents,
+  );
+}
+
+/**
+ * THE single guard used by the engine for sign-off, sending, clarification and acceptance.
+ * Handover transfers: receiver-profile validation (fields + identity). Legacy: pack required fields.
+ */
+export function transferBlockers(state: DemoState, t: TransferEpisode): string[] {
+  const v = handoverValidation(state, t);
+  if (v) return v.blockingReasons;
+  const pack = getPack(t.packId);
+  return missingRequiredFields(t).map(
+    (k) => `${pack.requiredFields.find((f) => f.key === k)?.label ?? k}: required information missing`,
+  );
 }
 
 export function tasksForTransfer(state: DemoState, transferId: string): CareTask[] {
@@ -87,7 +113,7 @@ export function taskStatusLabel(task: CareTask): string {
 export function transferStatusLabel(t: TransferEpisode): string {
   switch (t.status) {
     case "draft":
-      return "Draft — sender reviewing";
+      return t.handover ? "Draft — awaiting sender confirmation" : "Draft — sender reviewing";
     case "info-confirmed":
       return "Information confirmed by sender";
     case "handover-ready":

@@ -1,5 +1,5 @@
 "use client";
-import { attentionReasons, missingRequiredFields, patient, transferStatusLabel } from "@/core/selectors";
+import { attentionReasons, patient, transferBlockers, transferStatusLabel } from "@/core/selectors";
 import type { DemoState, TransferEpisode } from "@/core/types";
 import { SCENARIO_LABELS } from "@/scenarios/seed";
 import { TransferStatusBadge } from "./ui";
@@ -26,7 +26,7 @@ export function TransferList({
           const flags = state.tasks
             .filter((k) => k.transferId === t.id)
             .filter((k) => attentionReasons(k, state.now).some((r) => r !== "unassigned")).length;
-          const missing = missingRequiredFields(t).length;
+          const missing = transferBlockers(state, t).length;
           return (
             <li key={t.id}>
               <button
@@ -47,7 +47,7 @@ export function TransferList({
                   )}
                   {missing > 0 && (
                     <span className="rounded bg-amber-200 px-1.5 py-0.5 text-xs font-semibold text-amber-950">
-                      {missing} required field{missing === 1 ? "" : "s"} missing
+                      {missing} blocker{missing === 1 ? "" : "s"} (info / identity)
                     </span>
                   )}
                 </div>

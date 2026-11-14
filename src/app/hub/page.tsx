@@ -16,17 +16,79 @@ import { EventLog } from "@/components/EventLog";
 import { TaskCard } from "@/components/TaskCard";
 import { TransferList } from "@/components/TransferList";
 import { ErrorAlert, fmt, fromInput, Select, TextAction, toInput, TransferStatusBadge } from "@/components/ui";
+import { CapturePanel } from "@/components/CapturePanel";
+import { HandoverPanel, SignOffSummary } from "@/components/HandoverPanel";
+import { handoverValidation } from "@/core/selectors";
+import { getReceiverProfile } from "@/packs/receivers";
+import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
+
+function SignOffStep({ state, transfer, actorId }: { state: DemoState; transfer: TransferEpisode; actorId: string }) {
+  const { run, error } = useCommand();
+  const v = handoverValidation(state, transfer)!;
+  const a = practitioner(state, actorId);
+  const kind = TRANSFER_KIND_CONFIG[transfer.handover!.transferKind];
+  return (
+    <section className="card">
+      <h2 className="font-semibold">Sign off the handover</h2>
+      {v.blocking ? (
+        <div role="status" className="mt-1 text-sm text-red-900">
+          <strong>Awaiting sender confirmation — cannot be sent yet.</strong> Every required field must be GREEN and identity resolved:
+          <ul className="ml-5 list-disc">
+            {v.blockingReasons.map((r) => (
+              <li key={r}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="mt-1 text-sm text-green-900">All receiver-required information is present and confirmed. Ready for sign-off.</p>
+      )}
+      <p className="mt-2 text-sm">
+        Signing as <strong>{a?.name}</strong> ({a?.role}). Allowed roles for a {kind.label.toLowerCase()}: {kind.signOffRoles.join(", ")}. An
+        information-complete handover is not clinical acceptance by the receiver.
+      </p>
+      <button className="btn-primary mt-2" onClick={() => run({ type: "confirmSenderInfo", actorId, transferId: transfer.id, fields: {} })}>
+        Sign off handover
+      </button>
+      <div className="mt-2">
+        <ErrorAlert error={error} />
+      </div>
+    </section>
+  );
+}
+
+function ClarifyStep({ transfer, actorId }: { transfer: TransferEpisode; actorId: string }) {
+  const { run, error } = useCommand();
+  return (
+    <section className="card">
+      <h2 className="font-semibold">Return the clarified handover</h2>
+      <p className="text-sm">Receiver asked: “{transfer.clarificationQuestion}”. Correct or confirm fields above, then return it.</p>
+      <div className="mt-2">
+        <TextAction
+          label="Send clarification"
+          fieldLabel="Note to the receiving team"
+          variant="primary"
+          onSubmit={(note) => run({ type: "provideClarification", actorId, transferId: transfer.id, fields: {}, note })}
+        />
+      </div>
+      <div className="mt-2">
+        <ErrorAlert error={error} />
+      </div>
+    </section>
+  );
+}
 
 export default function SendingHub() {
   const state = useDemoState();
   const [selected, setSelected] = useState("tr-D");
-  const sending = state.transfers.filter((t) => t.sendingOrgId === "org-acute");
   const transfer = state.transfers.find((t) => t.id === selected);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-6">
-      <TransferList state={state} transfers={sending} selectedId={selected} onSelect={setSelected} label="Transfers from Northgate General" />
-      {transfer ? <SenderDetail key={transfer.id} state={state} transfer={transfer} /> : <p>Select a transfer.</p>}
+    <div className="space-y-4">
+      <CapturePanel state={state} onCreated={setSelected} />
+      <div className="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-6">
+        <TransferList state={state} transfers={state.transfers} selectedId={selected} onSelect={setSelected} label="Outgoing transfers (sender view)" />
+        {transfer ? <SenderDetail key={transfer.id} state={state} transfer={transfer} /> : <p>Select a transfer.</p>}
+      </div>
     </div>
   );
 }
@@ -36,7 +98,8 @@ function SenderDetail({ state, transfer }: { state: DemoState; transfer: Transfe
   const pack = getPack(transfer.packId);
   const actorId = transfer.sendingPractitionerId;
   const tasks = tasksForTransfer(state, transfer.id);
-  const missing = missingRequiredFields(transfer);
+  const missing = transfer.handover ? [] : missingRequiredFields(transfer);
+  const isHandover = !!transfer.handover;
 
   return (
     <div className="space-y-4">
@@ -48,7 +111,13 @@ function SenderDetail({ state, transfer }: { state: DemoState; transfer: Transfe
           <TransferStatusBadge status={transfer.status} label={transferStatusLabel(transfer)} />
         </div>
         <dl className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
-          <dt className="text-slate-600">Pathway pack</dt>
+          {transfer.handover && (
+            <>
+              <dt className="text-slate-600">Transfer kind</dt>
+              <dd>{TRANSFER_KIND_CONFIG[transfer.handover.transferKind].label}</dd>
+            </>
+          )}
+          <dt className="text-slate-600">Pathway pack (tasks)</dt>
           <dd>{pack.name}</dd>
           <dt className="text-slate-600">Sending (original responsibility)</dt>
           <dd>
@@ -77,10 +146,22 @@ function SenderDetail({ state, transfer }: { state: DemoState; transfer: Transfe
         ))}
       </section>
 
-      {["draft", "info-confirmed", "clarification-requested"].includes(transfer.status) && (
+      {isHandover && (
+        <>
+          <HandoverPanel state={state} transfer={transfer} mode="sender" actorId={actorId} />
+          {transfer.status === "draft" && <SignOffStep state={state} transfer={transfer} actorId={actorId} />}
+          {transfer.status === "clarification-requested" && <ClarifyStep transfer={transfer} actorId={actorId} />}
+          {transfer.status !== "draft" && (
+            <section className="card">
+              <SignOffSummary state={state} transfer={transfer} />
+            </section>
+          )}
+        </>
+      )}
+      {!isHandover && ["draft", "info-confirmed", "clarification-requested"].includes(transfer.status) && (
         <FieldsStep state={state} transfer={transfer} actorId={actorId} />
       )}
-      {!["draft", "info-confirmed", "clarification-requested"].includes(transfer.status) && (
+      {!isHandover && !["draft", "info-confirmed", "clarification-requested"].includes(transfer.status) && (
         <section className="card">
           <h2 className="font-semibold mb-2">Transfer information</h2>
           {missing.length > 0 && (
@@ -216,7 +297,7 @@ function SendStep({ state, transfer, actorId }: { state: DemoState; transfer: Tr
   const { run, error } = useCommand();
   const pack = getPack(transfer.packId);
   const drafts = tasksForTransfer(state, transfer.id).filter((k) => k.status === "draft");
-  const [org, setOrg] = useState("");
+  const [org, setOrg] = useState(transfer.handover ? getReceiverProfile(transfer.handover.receiverProfileId).orgId : "");
   const [confirmed, setConfirmed] = useState(false);
   const [deadlines, setDeadlines] = useState<Record<string, string>>(() =>
     Object.fromEntries(

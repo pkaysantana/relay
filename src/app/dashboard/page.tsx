@@ -3,6 +3,8 @@ import { organization, patient, practitioner, taskStatusLabel } from "@/core/sel
 import type { CareTask, DemoState } from "@/core/types";
 import { computeMetrics, type Ratio } from "@/metrics/dashboard";
 import { useDemoState } from "@/state/store";
+import { RECEIVER_PROFILES } from "@/packs/receivers";
+import { fieldLabel } from "@/packs/fields";
 import { EventLog } from "@/components/EventLog";
 import { fmt, hoursBetween } from "@/components/ui";
 
@@ -66,6 +68,41 @@ export default function Dashboard() {
         <section className="card">
           <h2 className="font-semibold mb-2">Rejected tasks</h2>
           <TaskTable state={state} tasks={m.rejectedTasks} />
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section className="card">
+          <h2 className="font-semibold mb-1">Missing required fields identified at capture</h2>
+          <p className="text-xs text-slate-600 mb-2">Simulated: counted from createHandover events, by receiver profile and field.</p>
+          {m.missingAtCapture.length === 0 ? (
+            <p className="text-sm text-slate-600">None identified.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-600 border-b">
+                  <th scope="col" className="py-1 pr-3">Receiver profile</th>
+                  <th scope="col" className="py-1 pr-3">Field</th>
+                  <th scope="col" className="py-1 text-right">Times missing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {m.missingAtCapture.map((r) => (
+                  <tr key={`${r.profileId}-${r.key}`} className="border-b border-slate-100">
+                    <td className="py-1 pr-3">{RECEIVER_PROFILES[r.profileId]?.name ?? r.profileId}</td>
+                    <td className="py-1 pr-3">{fieldLabel(r.key)}</td>
+                    <td className="py-1 text-right tabular-nums">{r.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+        <section className="card">
+          <h2 className="font-semibold mb-1">Handover submission → receiving-team acceptance</h2>
+          <p className="text-xs text-slate-600 mb-2">Simulated: median hours from sendTransfer to a named professional accepting, handover transfers only.</p>
+          <div className="text-3xl font-semibold tabular-nums">{hrs(m.handoverToAcceptance.median)}</div>
+          <div className="text-xs text-slate-600">{m.handoverToAcceptance.samples} accepted handover(s)</div>
         </section>
       </div>
 

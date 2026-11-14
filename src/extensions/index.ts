@@ -5,18 +5,18 @@
  *
  * OWNER: future capacity & scheduling / integrations.
  */
-import type { DemoState, ISODateTime, TransferEpisode } from "@/core/types";
-import type { PathwayPack } from "@/packs/types";
+import type { DemoState, EntryMethod, ISODateTime, SourceDocument, TransferEpisode } from "@/core/types";
+import type { ExtractedField } from "@/extraction/labelledParser";
 
-/** Document -> structured draft fields (e.g. rule parser or LLM). Output is never auto-confirmed. */
+/**
+ * Document -> extracted fields with VERBATIM evidence (quote + offsets). Output is never
+ * auto-confirmed; the engine rejects any quote that is not found verbatim in the document.
+ * Implemented: deterministic labelled parser (src/extraction). Future: OCR / model-based.
+ */
 export interface TransferExtractor {
   readonly id: string;
-  extract(document: string, pack: PathwayPack): Promise<{
-    fields: Record<string, string>;
-    /** Per-field provenance so the reviewer can see where each value came from. */
-    sources: Record<string, string>;
-    warnings: string[];
-  }>;
+  readonly method: EntryMethod;
+  extract(document: SourceDocument): Promise<{ fields: ExtractedField[]; warnings: string[] }>;
 }
 
 /** Simulated (later real) community capacity, e.g. Heim visit slots. Proposals only. */

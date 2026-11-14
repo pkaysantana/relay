@@ -26,7 +26,11 @@ One Next.js 15 App Router app, client-side only. UI → `dispatch(Command)` → 
 | Domain types (not FHIR) | `src/core/types.ts` | Core |
 | Engine: commands, transition table, invariants | `src/core/engine.ts` | Core |
 | Derived facts (overdue, needs-action, labels) | `src/core/selectors.ts` | Core |
-| Pathway packs (config only) | `src/packs/{types,general,index}.ts` | Clinical packs |
+| Pathway packs (tasks/timings/quality) | `src/packs/{types,general,index}.ts` | Clinical packs |
+| Receiver profiles, field catalogue, transfer kinds | `src/packs/{receivers,fields,transferKinds}.ts` | Clinical packs |
+| Receiver validation (pure: GREEN/AMBER/RED + identity) | `src/core/validation.ts` | Core |
+| Deterministic labelled parser | `src/extraction/labelledParser.ts` | Integrations |
+| Synthetic source documents | `src/data/documents.ts` | Demo lead |
 | Metrics | `src/metrics/dashboard.ts` | Evaluation |
 | FHIR R4-shaped export (one-way) | `src/fhir/toFhir.ts` | Core / integrations |
 | Deterministic scenarios A/B/C/D | `src/scenarios/seed.ts` | Core (+ demo lead) |
@@ -41,7 +45,18 @@ Ownership: edit only your own layer. Changes to `core/types.ts` or the `Command`
 - Task statuses are FHIR R4 `Task.status`: draft, requested, received, accepted, rejected, in-progress, on-hold, completed, failed, cancelled. Transitions live in `TASK_TRANSITIONS`.
 - **Overdue is derived** (`isOverdue`: due date passed and still outstanding). It is not stored, not `failed`, and is exported as `Task.businessStatus = overdue`.
 - Transfer: draft → info-confirmed → handover-ready → sent → received (acknowledged) → accepted | rejected | clarification-requested.
-- Accepting needs a **named professional** in the receiving org and **no missing required fields**.
+- **One guard: `transferBlockers()`** (selectors) is used by sign-off (`confirmSenderInfo`), `sendTransfer`, `provideClarification`, `acceptTransfer` and `acceptTask`. For handover transfers it applies the receiver-profile validation. For legacy transfers it applies the pack's required fields. The UI never decides permissions.
+- **Send rule:** a transfer can be sent only when every required field for the chosen receiver is GREEN and no identity discrepancy is open. AMBER on a required field blocks until a named professional confirms or corrects it. Optional fields never block.
+- Accepting also needs a **named professional** in the receiving org. Complete information is not clinical acceptance.
+
+### Handover validation (Prompt 2)
+- Evidence-aware `HandoverField`: value, entry method (manual | deterministic-extraction | ai-extraction), verbatim evidence (quote plus offsets, checked by the engine at capture), ambiguity flag, confirmer and role, last update. A **manual entry has no evidence**: the old provenance is kept in the event history and never re-attributed. **Extracted ≠ confirmed.**
+- The parser reads only "Label: value" lines using catalogue aliases. It flags malformed, empty and "TBC/?" values and never fixes them. Two different values for one field count as a **conflict**: RED and not confirmable until a person enters the correct value.
+- `validateHandover(handover, profile, patient, documents)` is pure. Each field result carries reasons, a sender question and the profile rule id. Conditional requirements take only one form: `requiredWhen: { field, equals }`, where `field` may be the pseudo-field `transferKind`.
+- Identity: the NHS number and DOB from the fields and from every source document are compared with the selected synthetic patient. A disagreement is a blocking **mismatch** and cannot be overridden. Missing identifiers make the result **unverified**, which also blocks unless a named professional records a manual check (`recordIdentityCheck`).
+- Transfer kind (`discharge` | `referral` | `provider-move`) changes terminology, which profiles are offered, the sign-off roles and the simulated next-step label. All kinds share one engine.
+- Profiles are **synthetic and not approved by any NHS receiver**. A profile names a destination role; a role is never treated as acceptance.
+- Adding a receiver means registering a profile in `src/packs/receivers.ts` (plus any new field in `fields.ts`). The engine stays unchanged.
 - `completeTask` needs status `in-progress` plus evidence (not future-dated). The evidence is stored on the task and in the event.
 - Rejected or failed tasks stay that way until `reassignTask`, `redirectTransfer` or `cancelTask` (each needs a reason).
 - `escalateTask` records an escalation without changing status or owner. The original requester is always kept.
@@ -52,13 +67,14 @@ Ownership: edit only your own layer. Changes to `core/types.ts` or the `Command`
 Create `src/packs/<name>.ts` exporting a `PathwayPack`, add it to `PACKS` in `src/packs/index.ts`, and run `npm test`. `tests/packs.test.ts` runs every pack through the same engine. No engine changes needed.
 
 ## Integration points (interfaces only — do not implement yet)
-`src/extensions/index.ts`: `TransferExtractor` (document → draft fields, human confirms), `CapacityProvider` (e.g. Heim slots), `FhirClient`, `PackBehaviour`.
+`src/extensions/index.ts`: `TransferExtractor` (document → fields with verbatim evidence; implemented only by the deterministic parser; OCR and model-based extraction are deferred), `CapacityProvider` (e.g. Heim slots), `FhirClient`, `PackBehaviour`. Later candidates: FHIR Questionnaire for receiver profiles, QuestionnaireResponse for handover fields. Not implemented. No UK Core, PRSB, e-RS, Shared PTL, DMAS, OPTICA or Heim integration is claimed.
 
-## Demo scenarios (Reset demo restores them)
-- **A** tr-A: complete info, accepted by community nursing, first contact completed with evidence, another action scheduled (not done).
-- **B** tr-B: required info missing, reablement rejects. Unresolved on the sending side (redirect, reassign or cancel).
-- **C** tr-C: accepted, first-contact deadline passed with no evidence. Overdue, so escalate it live.
-- **D** tr-D: fresh draft for the live walkthrough (one required field missing on purpose).
+## Demo scenarios (Reset demo restores them; all built through the handover flow)
+- **A** tr-A: complete discharge handover (doc-1) to community care, accepted by Jo Mensah, first contact completed with evidence, another action scheduled (not done).
+- **B** tr-B: complete GP referral (doc-2) to specialist outpatients, **rejected** with a reason. Unresolved and still owned by the GP sender.
+- **C** tr-C: accepted. The first-contact deadline passed with no evidence, so it is overdue; escalate it live.
+- **D** tr-D: ambiguous/contradictory (doc-4): allergies conflict, timing "TBC", interpreter language missing (conditional). **Unsent, awaiting sender confirmation**, with its questions shown.
+- Live: capture doc-5 (missing allergies, empty contact), correct it, sign off, send, then accept or reject in `/receive`. doc-6 is the wrong-patient document. Click-through: `docs/DEMO-CHECKLIST.md`.
 
 ## Commands
 `npm run dev` · `npm test` · `npm run build`

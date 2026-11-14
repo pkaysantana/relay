@@ -45,6 +45,25 @@ export interface DashboardMetrics {
   hoursToAcceptance: { median: number | null; samples: number };
   hoursToFirstContact: { median: number | null; samples: number };
   packMeasures: { packId: string; id: string; label: string; description: string; result: Ratio }[];
+  /** Required fields absent at capture (createHandover events), grouped by receiver profile and field. */
+  missingAtCapture: { profileId: string; key: string; count: number }[];
+  /** Handover transfers: submission (sendTransfer) → named-professional acceptance. */
+  handoverToAcceptance: { median: number | null; samples: number };
+}
+
+function missingAtCapture(state: DemoState): DashboardMetrics["missingAtCapture"] {
+  const counts = new Map<string, { profileId: string; key: string; count: number }>();
+  for (const e of state.events) {
+    if (e.type !== "createHandover") continue;
+    const profileId = String(e.data?.receiverProfileId ?? "unknown");
+    for (const key of (e.data?.missingRequired as string[] | undefined) ?? []) {
+      const id = `${profileId}|${key}`;
+      const row = counts.get(id) ?? { profileId, key, count: 0 };
+      row.count += 1;
+      counts.set(id, row);
+    }
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
 export function computeMetrics(state: DemoState): DashboardMetrics {
@@ -125,5 +144,12 @@ export function computeMetrics(state: DemoState): DashboardMetrics {
     hoursToAcceptance: { median: median(toAcceptance), samples: toAcceptance.length },
     hoursToFirstContact: { median: median(toFirstContact), samples: toFirstContact.length },
     packMeasures,
+    missingAtCapture: missingAtCapture(state),
+    handoverToAcceptance: (() => {
+      const xs = initiated
+        .filter((t) => t.handover && t.acceptedAt)
+        .map((t) => hoursBetween(t.initiatedAt!, t.acceptedAt!));
+      return { median: median(xs), samples: xs.length };
+    })(),
   };
 }
