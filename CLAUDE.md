@@ -69,7 +69,21 @@ Create `src/packs/<name>.ts` exporting a `PathwayPack`, add it to `PACKS` in `sr
 ## Integration points (interfaces only — do not implement yet)
 `src/extensions/index.ts`: `TransferExtractor` (document → fields with verbatim evidence; implemented only by the deterministic parser; OCR and model-based extraction are deferred), `CapacityProvider` (e.g. Heim slots), `FhirClient`, `PackBehaviour`. Later candidates: FHIR Questionnaire for receiver profiles, QuestionnaireResponse for handover fields. Not implemented. No UK Core, PRSB, e-RS, Shared PTL, DMAS, OPTICA or Heim integration is claimed.
 
+## Working niche: cataract, NHS → independent sector (Prompt 3)
+- Product name in the UI: **Relay**. The repo is still called doorstep.
+- Demo sets (`src/scenarios/index.ts`): **cataract** (the default) and **generic**. Switch them in the header; switching resets to that set. The store remembers the current set.
+- Pack `cataract-provider-move` (`src/packs/cataract.ts`) defines three tasks: book the first appointment (`marksAppointmentBooked`; booking is not treatment), pre-op assessment (counts as first care contact), and record the surgery outcome. Its `escalationRole` is `pathway-coordinator`. Timings are illustrative; the 4-day booking review deadline is synthetic, not a national standard.
+- Profiles `independent-ophthalmology` (Brookfield, org-isp) and `nhs-ophthalmology` (Westmoor). Fields marked `confirmRoles` can only be confirmed by those roles: treatment plan and laterality by an ophthalmologist; the patient's agreement to the alternative provider by a coordinator or ophthalmologist. That agreement is a separate field from surgical consent.
+- `capabilities` statements (e.g. "no GA on site") are **displayed only**. They never block or auto-reject; the receiving professional decides.
+- Redirecting a handover transfer requires the sender to pick the new `receiverProfileId`. The handover is then re-validated. Relay never auto-routes.
+- `laterality` is its own field format (right or left). The parser never infers it from free text.
+- Dashboard pipeline (`computePipeline`): awaiting information / ready to send / sent, not accepted / accepted / rejected / accepted but awaiting appointment (with the escalation contact) / completed actions with evidence.
+- Open clinical questions for the clinical lead are listed in the Prompt 3 report. Every clinical assumption is labelled "Illustrative — pending clinician sign-off".
+
 ## Demo scenarios (Reset demo restores them; all built through the handover flow)
+**Cataract set** (`src/scenarios/cataract.ts`, documents in `src/data/cataractDocuments.ts`): cat-A accepted, booking recorded, surgery open · cat-B GA-documented case rejected by Brookfield, sender keeps it · cat-C accepted, booking review deadline passed (escalate to Priya Shah) · cat-D laterality right vs left across two documents, unsent · live E = capture cdoc-E (laterality missing, agreement "To be confirmed").
+
+**Generic set:**
 - **A** tr-A: complete discharge handover (doc-1) to community care, accepted by Jo Mensah, first contact completed with evidence, another action scheduled (not done).
 - **B** tr-B: complete GP referral (doc-2) to specialist outpatients, **rejected** with a reason. Unresolved and still owned by the GP sender.
 - **C** tr-C: accepted. The first-contact deadline passed with no evidence, so it is overdue; escalate it live.

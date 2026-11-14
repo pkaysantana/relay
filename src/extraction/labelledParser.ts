@@ -49,6 +49,12 @@ function normaliseValue(def: FieldDefinition, raw: string): { value: string; amb
     if (["no", "n"].includes(l)) return { value: "no" };
     return { value: v, ambiguity: "expected yes or no" };
   }
+  if (def.format === "laterality") {
+    const l = v.toLowerCase().replace(/[^a-z ]/g, "").trim();
+    if (["right", "r", "re", "right eye"].includes(l)) return { value: "right" };
+    if (["left", "l", "le", "left eye"].includes(l)) return { value: "left" };
+    return { value: v, ambiguity: "laterality must name a single eye (right or left)" };
+  }
   const amb = AMBIGUOUS.exec(v)?.[0] ?? (v.includes("?") ? "?" : undefined);
   return { value: v, ambiguity: amb ? `contains "${amb}"` : undefined };
 }
@@ -62,7 +68,7 @@ export function parseLabelledDocument(doc: SourceDocument): { fields: ExtractedF
     const lineStart = offset;
     offset += rawLine.length + 1;
     const line = rawLine.replace(/\r$/, "");
-    const m = line.match(/^(\s*)([A-Za-z][A-Za-z /()'-]{0,39}?)\s*:(.*)$/);
+    const m = line.match(/^(\s*)([A-Za-z][A-Za-z /()'-]{0,59}?)\s*:(.*)$/);
     if (!m) continue;
     const def = ALIAS.get(normLabel(m[2]));
     if (!def) {

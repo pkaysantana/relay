@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "Doorstep — transfer-of-care coordination (prototype)",
+  title: "Relay — handover readiness and accountability (prototype)",
   description: "Synthetic-data prototype: explicit, traceable, measurable handovers between services.",
 };
 

@@ -5,7 +5,7 @@
  *
  * OWNER: clinical packs.
  */
-export type FieldFormat = "text" | "date" | "nhs-number" | "yes-no";
+export type FieldFormat = "text" | "date" | "nhs-number" | "yes-no" | "laterality";
 
 export interface FieldDefinition {
   key: string;
@@ -37,6 +37,31 @@ export const FIELD_CATALOGUE: FieldDefinition[] = [
   { key: "patientChoice", label: "Patient consent / choice recorded", aliases: ["patient consent", "patient choice", "consent"], format: "text" },
   { key: "previousProvider", label: "Current treating provider", aliases: ["current provider", "previous provider", "transferring provider"], format: "text" },
   { key: "accessNotes", label: "Access / visit notes", aliases: ["access notes", "access"], format: "text", long: true },
+  // --- Fields used by the cataract demonstration (illustrative — pending clinician sign-off)
+  { key: "sendingService", label: "Sending clinical service", aliases: ["sending service", "referring service"], format: "text" },
+  { key: "treatmentPlan", label: "Ophthalmologist's documented treatment plan", aliases: ["treatment plan"], format: "text", long: true },
+  { key: "laterality", label: "Eye (laterality) for the proposed procedure", aliases: ["laterality", "operative eye", "eye for surgery"], format: "laterality" },
+  { key: "eyeSequence", label: "First or second eye", aliases: ["first or second eye", "eye sequence"], format: "text" },
+  {
+    key: "providerTransferAgreement",
+    label: "Patient agreement to the alternative provider (not surgical consent)",
+    aliases: ["patient agreement to alternative provider", "agreement to alternative provider", "patient agreement to transfer"],
+    format: "text",
+  },
+  { key: "receivingContact", label: "Receiving organisation contact / owning role", aliases: ["receiving contact"], format: "text" },
+  { key: "nextAction", label: "Required next action", aliases: ["next action", "required next action"], format: "text" },
+  { key: "accountableProfessional", label: "Accountable professional for the next action", aliases: ["accountable professional"], format: "text" },
+  { key: "visualAcuity", label: "Visual acuity (both eyes where available)", aliases: ["visual acuity"], format: "text" },
+  { key: "refraction", label: "Refraction", aliases: ["refraction"], format: "text" },
+  { key: "intraocularPressure", label: "Intraocular pressure", aliases: ["intraocular pressure", "iop"], format: "text" },
+  { key: "ocularHistory", label: "Ocular history / co-pathology", aliases: ["ocular history", "co-pathology", "copathology"], format: "text", long: true },
+  { key: "medicalHistory", label: "Relevant medical history", aliases: ["medical history", "relevant medical history"], format: "text", long: true },
+  { key: "anticoagulants", label: "Anticoagulant history", aliases: ["anticoagulants", "anticoagulant history"], format: "text" },
+  { key: "alphaBlockers", label: "Alpha-blocker history", aliases: ["alpha-blockers", "alpha blockers", "alphablockers"], format: "text" },
+  { key: "anaestheticRequirement", label: "Anaesthetic considerations", aliases: ["anaesthetic requirement", "anaesthetic considerations"], format: "text" },
+  { key: "previousEyeProcedures", label: "Previous eye procedures", aliases: ["previous eye procedures"], format: "text" },
+  { key: "biometry", label: "Biometry / keratometry", aliases: ["biometry", "keratometry"], format: "text" },
+  { key: "accessNeeds", label: "Mobility, access, transport and communication needs", aliases: ["access needs", "communication needs"], format: "text" },
 ];
 
 export const FIELD_BY_KEY: Record<string, FieldDefinition> = Object.fromEntries(

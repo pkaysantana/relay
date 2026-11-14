@@ -4,11 +4,13 @@
  *   2. add it to PACKS below
  * No engine changes required — tests/packs.test.ts runs every registered pack through the core engine.
  */
+import { cataractPack } from "./cataract";
 import { generalPack } from "./general";
 import type { PathwayPack } from "./types";
 
 export const PACKS: Record<string, PathwayPack> = {
   [generalPack.id]: generalPack,
+  [cataractPack.id]: cataractPack,
 };
 
 export const DEFAULT_PACK_ID = generalPack.id;

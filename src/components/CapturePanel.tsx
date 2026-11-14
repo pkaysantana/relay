@@ -17,17 +17,27 @@ import { ErrorAlert, Select } from "./ui";
 export function CapturePanel({ state, onCreated }: { state: DemoState; onCreated: (transferId: string) => void }) {
   const { run, error } = useCommand();
   const [open, setOpen] = useState(false);
-  const [docIds, setDocIds] = useState<string[]>(["doc-5"]);
+  // Defaults point at the live-demo document of whichever demo set is loaded.
+  const cataract = state.patients.some((p) => p.id === "pat-c5");
+  const d = cataract
+    ? { doc: "cdoc-E", patient: "pat-c5", kind: "provider-move" as TransferKind, profile: "independent-ophthalmology", sender: "prac-eye-1", by: "prac-eye-2" }
+    : { doc: "doc-5", patient: "pat-5", kind: "discharge" as TransferKind, profile: "community-care", sender: "prac-ward-1", by: "prac-ward-1" };
+  const docs = PREPARED_DOCUMENTS.filter((x) => state.patients.some((p) => p.id === x.intendedPatientId));
+  const [docIds, setDocIds] = useState<string[]>([d.doc]);
   const [pasted, setPasted] = useState("");
-  const [patientId, setPatientId] = useState("pat-5");
-  const [kind, setKind] = useState<TransferKind>("discharge");
-  const profiles = listReceiverProfiles(kind);
-  const [profileChoice, setProfileChoice] = useState("community-care");
+  const [patientId, setPatientId] = useState(d.patient);
+  const [kind, setKind] = useState<TransferKind>(d.kind);
+  const profiles = listReceiverProfiles(kind, state.organizations.map((o) => o.id));
+  const [profileChoice, setProfileChoice] = useState(d.profile);
   const profileId = profiles.some((p) => p.id === profileChoice) ? profileChoice : profiles[0]?.id ?? "";
   const profile = profiles.find((p) => p.id === profileId);
   const senders = state.practitioners.filter((p) => !profile || p.orgId !== profile.orgId);
-  const [senderChoice, setSenderChoice] = useState("prac-ward-1");
+  const [senderChoice, setSenderChoice] = useState(d.sender);
   const senderId = senders.some((p) => p.id === senderChoice) ? senderChoice : senders[0]?.id ?? "";
+  const senderOrg = state.practitioners.find((p) => p.id === senderId)?.orgId;
+  const capturers = state.practitioners.filter((p) => p.orgId === senderOrg);
+  const [byChoice, setByChoice] = useState(d.by);
+  const capturedBy = capturers.some((p) => p.id === byChoice) ? byChoice : senderId;
   const pasteId = useId();
 
   if (!open)
@@ -38,13 +48,13 @@ export function CapturePanel({ state, onCreated }: { state: DemoState; onCreated
     );
 
   const create = () => {
-    const documents = PREPARED_DOCUMENTS.filter((d) => docIds.includes(d.id)).map((d) => ({ id: d.id, title: d.title, text: d.text }));
+    const documents = docs.filter((x) => docIds.includes(x.id)).map((x) => ({ id: x.id, title: x.title, text: x.text }));
     if (pasted.trim()) documents.push({ id: `doc-pasted-${state.nextId}`, title: `Pasted document ${state.nextId}`, text: pasted });
     const parsed = documents.map((d) => parseLabelledDocument({ ...d, addedAt: "" }));
     const before = new Set(getDemoState().transfers.map((t) => t.id));
     const ok = run({
       type: "createHandover",
-      actorId: senderId,
+      actorId: capturedBy,
       patientId,
       sendingPractitionerId: senderId,
       transferKind: kind,
@@ -67,7 +77,7 @@ export function CapturePanel({ state, onCreated }: { state: DemoState; onCreated
       <fieldset>
         <legend className="label">1. Source documents (synthetic)</legend>
         <ul className="space-y-1">
-          {PREPARED_DOCUMENTS.map((d) => (
+          {docs.map((d) => (
             <li key={d.id}>
               <label className="flex items-start gap-2 text-sm">
                 <input
@@ -112,6 +122,12 @@ export function CapturePanel({ state, onCreated }: { state: DemoState; onCreated
           value={senderId}
           onChange={setSenderChoice}
           options={senders.map((p) => ({ value: p.id, label: `${p.name} — ${p.role}` }))}
+        />
+        <Select
+          label="6. Captured by (you — recorded in the audit history)"
+          value={capturedBy}
+          onChange={setByChoice}
+          options={capturers.map((p) => ({ value: p.id, label: `${p.name} — ${p.role}` }))}
         />
       </div>
       <p className="text-xs text-slate-600">

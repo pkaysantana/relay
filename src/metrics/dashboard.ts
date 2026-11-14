@@ -4,8 +4,8 @@
  *
  * OWNER: evaluation & metrics.
  */
-import { isOutstanding, isOverdue } from "@/core/selectors";
-import type { CareTask, DemoState } from "@/core/types";
+import { isOutstanding, isOverdue, transferBlockers } from "@/core/selectors";
+import type { CareTask, DemoState, Practitioner, TransferEpisode } from "@/core/types";
 import { getPack } from "@/packs";
 
 export interface Ratio {
@@ -49,6 +49,47 @@ export interface DashboardMetrics {
   missingAtCapture: { profileId: string; key: string; count: number }[];
   /** Handover transfers: submission (sendTransfer) → named-professional acceptance. */
   handoverToAcceptance: { median: number | null; samples: number };
+  pipeline: Pipeline;
+}
+
+export interface Pipeline {
+  /** Not sent; receiver-required information missing/unconfirmed, identity open, or clarification pending. */
+  awaitingInformation: TransferEpisode[];
+  /** Not sent; nothing blocking (still needs sign-off / deadlines / send). */
+  readyToSend: TransferEpisode[];
+  sentUnaccepted: TransferEpisode[];
+  accepted: TransferEpisode[];
+  rejected: TransferEpisode[];
+  /** Accepted, but the appointment-booking milestone is not completed. Booking ≠ treatment. */
+  awaitingAppointment: { transfer: TransferEpisode; task: CareTask; overdue: boolean; escalationContact?: Practitioner }[];
+  /** Downstream actions completed WITH recorded evidence. */
+  completedWithEvidence: CareTask[];
+}
+
+export function computePipeline(state: DemoState): Pipeline {
+  const unsent = state.transfers.filter((t) => ["draft", "info-confirmed", "handover-ready", "clarification-requested"].includes(t.status));
+  const blocked = (t: TransferEpisode) => t.status === "clarification-requested" || transferBlockers(state, t).length > 0;
+  const awaitingAppointment = state.transfers
+    .filter((t) => t.status === "accepted")
+    .flatMap((t) => {
+      const pack = getPack(t.packId);
+      const bookingIds = new Set(pack.taskTemplates.filter((x) => x.marksAppointmentBooked).map((x) => x.id));
+      const task = state.tasks.find((k) => k.transferId === t.id && bookingIds.has(k.templateId) && k.status !== "completed" && k.status !== "cancelled");
+      if (!task) return [];
+      const escalationContact =
+        state.practitioners.find((p) => p.orgId === t.sendingOrgId && p.role === pack.escalationRole) ??
+        state.practitioners.find((p) => p.id === t.sendingPractitionerId);
+      return [{ transfer: t, task, overdue: isOverdue(task, state.now), escalationContact }];
+    });
+  return {
+    awaitingInformation: unsent.filter(blocked),
+    readyToSend: unsent.filter((t) => !blocked(t)),
+    sentUnaccepted: state.transfers.filter((t) => t.status === "sent" || t.status === "received"),
+    accepted: state.transfers.filter((t) => t.status === "accepted"),
+    rejected: state.transfers.filter((t) => t.status === "rejected"),
+    awaitingAppointment,
+    completedWithEvidence: state.tasks.filter((k) => k.status === "completed" && !!k.evidence),
+  };
 }
 
 function missingAtCapture(state: DemoState): DashboardMetrics["missingAtCapture"] {
@@ -145,6 +186,7 @@ export function computeMetrics(state: DemoState): DashboardMetrics {
     hoursToFirstContact: { median: median(toFirstContact), samples: toFirstContact.length },
     packMeasures,
     missingAtCapture: missingAtCapture(state),
+    pipeline: computePipeline(state),
     handoverToAcceptance: (() => {
       const xs = initiated
         .filter((t) => t.handover && t.acceptedAt)

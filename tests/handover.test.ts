@@ -187,7 +187,7 @@ describe("validation rules", () => {
 
 describe("integration: capture → review → send → receive through the store", () => {
   it("runs the full UI command sequence and reset restores the scenarios", () => {
-    resetDemo();
+    resetDemo("generic");
     const must = (r: ReturnType<typeof dispatch>) => {
       if (!r.ok) throw new Error(r.error);
     };
@@ -210,7 +210,7 @@ describe("integration: capture → review → send → receive through the store
     expect(transfer(done, "tr-UI")).toMatchObject({ status: "accepted", receivingPractitionerId: "prac-cn-2", senderConfirmedBy: WARD });
     expect(done.tasks.filter((k) => k.transferId === "tr-UI").every((k) => k.status === "accepted")).toBe(true); // accepted ≠ completed
 
-    resetDemo();
+    resetDemo("generic");
     expect(getDemoState()).toEqual(createSeedState());
   });
 });

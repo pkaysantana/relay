@@ -8,7 +8,7 @@ import { captureCommand, confirmCommands, createSeedState, suggestedDeadlines } 
 describe("7. all configured pathway packs use the same core engine", () => {
   for (const pack of listPacks()) {
     it(`${pack.id}: handover lifecycle runs through the shared engine`, () => {
-      let s = createSeedState(pack.id);
+      let s = createSeedState(); // generic base; the pack under test is applied to the new transfer
       const capture = captureCommand({
         actorId: "prac-ward-1",
         transferId: "tr-P",
@@ -39,7 +39,7 @@ describe("7. all configured pathway packs use the same core engine", () => {
     });
 
     it(`${pack.id}: legacy pack-field transfers obey the same send rule`, () => {
-      let s = createSeedState(pack.id);
+      let s = createSeedState(); // generic base; the pack under test is applied to the new transfer
       const legacy: TransferEpisode = {
         id: "tr-L",
         patientId: "pat-5",

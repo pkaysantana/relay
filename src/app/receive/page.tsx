@@ -14,13 +14,21 @@ import { TaskCard } from "@/components/TaskCard";
 import { EventLog } from "@/components/EventLog";
 import { HandoverPanel, SignOffSummary } from "@/components/HandoverPanel";
 import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
+import { listReceiverProfiles } from "@/packs/receivers";
 import { TransferList } from "@/components/TransferList";
 import { ErrorAlert, fmt, Select, TextAction, TransferStatusBadge } from "@/components/ui";
 
 export default function ReceivingView() {
   const state = useDemoState();
-  const receivingOrgs = state.organizations.filter((o) => o.type !== "acute");
-  const [orgId, setOrgId] = useState("org-community");
+  // Receiving organisations = those with a registered receiver profile or an incoming transfer.
+  const receivingOrgs = state.organizations.filter(
+    (o) => listReceiverProfiles(undefined, [o.id]).length > 0 || state.transfers.some((t) => t.receivingOrgId === o.id),
+  );
+  const [orgChoice, setOrgId] = useState<string | undefined>();
+  const orgId =
+    orgChoice && receivingOrgs.some((o) => o.id === orgChoice)
+      ? orgChoice
+      : (receivingOrgs.find((o) => state.transfers.some((t) => t.receivingOrgId === o.id)) ?? receivingOrgs[0])?.id ?? "";
   const staff = state.practitioners.filter((p) => p.orgId === orgId);
   const [actorChoice, setActorChoice] = useState("");
   const actorId = staff.some((p) => p.id === actorChoice) ? actorChoice : staff[0]?.id ?? "";
@@ -120,6 +128,22 @@ function ReceiverDetail({
           </p>
         )}
       </section>
+      {transfer.decisions.length > 0 && (
+        <section className="card" aria-label="Decisions">
+          <h2 className="font-semibold mb-1">Decisions on responsibility</h2>
+          <ul className="space-y-1 text-sm">
+            {transfer.decisions.map((d, i) => {
+              const who = practitioner(state, d.by);
+              return (
+                <li key={i}>
+                  <strong>{d.outcome}</strong> by {who?.name} ({who?.role}), {fmt(d.at)}
+                  {d.reason ? `: ${d.reason}` : ""}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {transfer.handover && <HandoverPanel state={state} transfer={transfer} mode="receiver" actorId={actorId} />}
 
       {isReceiver && ["sent", "received", "clarification-requested"].includes(transfer.status) && (

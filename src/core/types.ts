@@ -42,7 +42,7 @@ export const TRANSFER_STATUSES = [
 ] as const;
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number];
 
-export type OrgType = "acute" | "community" | "primary-care" | "social-care" | "specialist";
+export type OrgType = "acute" | "community" | "primary-care" | "social-care" | "specialist" | "independent";
 
 /** Transfer context only — not clinical eligibility and not the decision to transfer. */
 export const TRANSFER_KINDS = ["discharge", "referral", "provider-move"] as const;

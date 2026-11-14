@@ -77,7 +77,15 @@ export type Command =
       fields: Record<string, string>;
       note: string;
     }
-  | { type: "redirectTransfer"; actorId: Id; transferId: Id; receivingOrgId: Id; note: string }
+  | {
+      type: "redirectTransfer";
+      actorId: Id;
+      transferId: Id;
+      receivingOrgId: Id;
+      note: string;
+      /** Required for handover transfers: the new receiver profile (re-validated before redirecting). */
+      receiverProfileId?: string;
+    }
   | { type: "acknowledgeTask"; actorId: Id; taskId: Id }
   | { type: "acceptTask"; actorId: Id; taskId: Id; ownerPractitionerId?: Id }
   | { type: "rejectTask"; actorId: Id; taskId: Id; reason: string }
@@ -329,7 +337,7 @@ function run(s: DemoState, cmd: Command): void {
       const t: TransferEpisode = {
         id,
         patientId: patient.id,
-        packId: cmd.packId ?? DEFAULT_PACK_ID,
+        packId: cmd.packId ?? profile.defaultPackId ?? DEFAULT_PACK_ID,
         sendingOrgId: sender.orgId,
         sendingPractitionerId: sender.id,
         plannedDischargeAt: s.now,
@@ -408,6 +416,9 @@ function run(s: DemoState, cmd: Command): void {
       const problem = formatProblem(cmd.key, f!.value);
       if (problem) fail(`${problem}: correct it before confirming`);
       const a = actor(s, cmd.actorId)!;
+      const rule = getReceiverProfile(h.receiverProfileId).fields.find((r) => r.key === cmd.key);
+      if (rule?.confirmRoles && !rule.confirmRoles.includes(a.role))
+        fail(`${FIELD_BY_KEY[cmd.key]?.label ?? cmd.key} must be confirmed by: ${rule.confirmRoles.join(" or ")} (you are ${a.role})`);
       f!.confirmedBy = a.id;
       f!.confirmedRole = a.role;
       f!.confirmedAt = s.now;
@@ -602,6 +613,17 @@ function run(s: DemoState, cmd: Command): void {
       const org = s.organizations.find((o) => o.id === cmd.receivingOrgId);
       if (!org || org.id === t.sendingOrgId) fail("Choose a receiving organisation");
       if (org!.id === t.receivingOrgId) fail("Choose a different organisation from the one that rejected");
+      if (t.handover) {
+        // Explicit, human-chosen redirection: the handover is re-validated against the new receiver.
+        const profile = RECEIVER_PROFILES[cmd.receiverProfileId ?? ""] ?? fail("Choose the receiver profile of the new service");
+        if (profile.orgId !== org!.id) fail("The chosen profile belongs to a different organisation");
+        if (!profile.transferKinds.includes(t.handover.transferKind)) fail(`${profile.name} does not accept this kind of transfer`);
+        const previousProfileId = t.handover.receiverProfileId;
+        t.handover.receiverProfileId = profile.id;
+        const blockers = transferBlockers(s, t);
+        if (blockers.length) fail(`Cannot redirect: the new receiver needs more information (${blockers.join("; ")})`);
+        emit(s, { actorId: cmd.actorId, type: "receiverProfileChanged", transferId: t.id, data: { from: previousProfileId, to: profile.id } });
+      }
       for (const k of s.tasks.filter((k) => k.transferId === t.id && k.status === "rejected")) {
         k.ownerOrgId = org!.id;
         k.ownerPractitionerId = undefined;

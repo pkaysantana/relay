@@ -38,6 +38,8 @@ export interface TaskTemplate {
   evidenceRef?: string;
   /** Completion of this task counts as "first care contact" for metrics. */
   marksFirstCareContact?: boolean;
+  /** Completion records that an appointment was BOOKED (a milestone, never the treatment itself). */
+  marksAppointmentBooked?: boolean;
 }
 
 export interface QualityMeasureResult {
@@ -68,4 +70,6 @@ export interface PathwayPack {
   taskTemplates: TaskTemplate[];
   references: { label: string; note?: string }[];
   qualityMeasures: QualityMeasure[];
+  /** Sending-side role shown as the escalation contact for unresolved next actions. */
+  escalationRole?: string;
 }

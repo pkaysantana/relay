@@ -13,7 +13,9 @@ export interface PreparedDocument {
 
 const HEADER = "SYNTHETIC DOCUMENT — FICTIONAL PATIENT — NOT FOR CLINICAL USE";
 
-export const PREPARED_DOCUMENTS: PreparedDocument[] = [
+import { CATARACT_DOCUMENTS } from "./cataractDocuments";
+
+const GENERIC_DOCUMENTS: PreparedDocument[] = [
   {
     id: "doc-1",
     title: "Discharge handover — Synthetic Patient A",
@@ -117,6 +119,8 @@ DOB: 12/03/1948
 Medications: Synthetic list SYN-MED-0001 (printed copy).`,
   },
 ];
+
+export const PREPARED_DOCUMENTS: PreparedDocument[] = [...GENERIC_DOCUMENTS, ...CATARACT_DOCUMENTS];
 
 export function preparedDocument(id: string): PreparedDocument {
   const d = PREPARED_DOCUMENTS.find((x) => x.id === id);

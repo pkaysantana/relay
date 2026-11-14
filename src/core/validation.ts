@@ -68,6 +68,7 @@ export function formatProblem(key: string, value: string): string | undefined {
   if (def.format === "nhs-number" && !/^\d{10}$/.test(digitsOnly(value))) return "Not a 10-digit NHS number";
   if (def.format === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return "Date must be YYYY-MM-DD";
   if (def.format === "yes-no" && !["yes", "no"].includes(norm(value))) return "Expected yes or no";
+  if (def.format === "laterality" && !["right", "left"].includes(norm(value))) return "Expected a single eye: right or left";
   return undefined;
 }
 
@@ -190,6 +191,7 @@ export function validateHandover(
       const reasons = [
         f.ambiguity ? `Flagged as ambiguous: ${f.ambiguity}` : "Present but not yet confirmed by a named professional",
         f.entryMethod === "manual" ? "Entered manually (no source document)" : `Extracted (${f.entryMethod})`,
+        ...(r.confirmRoles ? [`Must be confirmed by: ${r.confirmRoles.join(" or ")}`] : []),
       ];
       return {
         ...base,

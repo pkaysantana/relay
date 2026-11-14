@@ -11,7 +11,7 @@ import {
 import type { DemoState, TransferEpisode } from "@/core/types";
 import { toFhirBundle } from "@/fhir/toFhir";
 import { getPack } from "@/packs";
-import { useCommand, useDemoState } from "@/state/store";
+import { useCommand, useDemoSet, useDemoState } from "@/state/store";
 import { EventLog } from "@/components/EventLog";
 import { TaskCard } from "@/components/TaskCard";
 import { TransferList } from "@/components/TransferList";
@@ -19,7 +19,8 @@ import { ErrorAlert, fmt, fromInput, Select, TextAction, toInput, TransferStatus
 import { CapturePanel } from "@/components/CapturePanel";
 import { HandoverPanel, SignOffSummary } from "@/components/HandoverPanel";
 import { handoverValidation } from "@/core/selectors";
-import { getReceiverProfile } from "@/packs/receivers";
+import { getReceiverProfile, listReceiverProfiles } from "@/packs/receivers";
+import { DEMO_SETS } from "@/scenarios";
 import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
 
 function SignOffStep({ state, transfer, actorId }: { state: DemoState; transfer: TransferEpisode; actorId: string }) {
@@ -79,12 +80,16 @@ function ClarifyStep({ transfer, actorId }: { transfer: TransferEpisode; actorId
 
 export default function SendingHub() {
   const state = useDemoState();
-  const [selected, setSelected] = useState("tr-D");
+  const demoSet = useDemoSet();
+  const [choice, setSelected] = useState<string | undefined>();
+  const selected =
+    (choice && state.transfers.some((t) => t.id === choice) ? choice : undefined) ??
+    (state.transfers.some((t) => t.id === DEMO_SETS[demoSet].defaultTransferId) ? DEMO_SETS[demoSet].defaultTransferId : state.transfers[0]?.id);
   const transfer = state.transfers.find((t) => t.id === selected);
 
   return (
     <div className="space-y-4">
-      <CapturePanel state={state} onCreated={setSelected} />
+      <CapturePanel key={demoSet} state={state} onCreated={setSelected} />
       <div className="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-6">
         <TransferList state={state} transfers={state.transfers} selectedId={selected} onSelect={setSelected} label="Outgoing transfers (sender view)" />
         {transfer ? <SenderDetail key={transfer.id} state={state} transfer={transfer} /> : <p>Select a transfer.</p>}
@@ -96,7 +101,9 @@ export default function SendingHub() {
 function SenderDetail({ state, transfer }: { state: DemoState; transfer: TransferEpisode }) {
   const p = patient(state, transfer.patientId)!;
   const pack = getPack(transfer.packId);
-  const actorId = transfer.sendingPractitionerId;
+  const sendingStaff = state.practitioners.filter((x) => x.orgId === transfer.sendingOrgId);
+  const [actorChoice, setActorChoice] = useState(transfer.sendingPractitionerId);
+  const actorId = sendingStaff.some((x) => x.id === actorChoice) ? actorChoice : transfer.sendingPractitionerId;
   const tasks = tasksForTransfer(state, transfer.id);
   const missing = transfer.handover ? [] : missingRequiredFields(transfer);
   const isHandover = !!transfer.handover;
@@ -146,6 +153,20 @@ function SenderDetail({ state, transfer }: { state: DemoState; transfer: Transfe
         ))}
       </section>
 
+      <section className="card flex flex-wrap items-end gap-3">
+        <div className="min-w-72">
+          <Select
+            label="Acting as (sending organisation staff — every action is recorded under this name)"
+            value={actorId}
+            onChange={setActorChoice}
+            options={sendingStaff.map((x) => ({ value: x.id, label: `${x.name} — ${x.role}` }))}
+          />
+        </div>
+        <p className="text-xs text-slate-600">
+          Responsible sending professional: {practitioner(state, transfer.sendingPractitionerId)?.name}. Responsibility stays with the sending team until a named
+          receiving professional accepts.
+        </p>
+      </section>
       {isHandover && (
         <>
           <HandoverPanel state={state} transfer={transfer} mode="sender" actorId={actorId} />
@@ -374,6 +395,48 @@ function SendStep({ state, transfer, actorId }: { state: DemoState; transfer: Tr
 function RedirectStep({ state, transfer, actorId }: { state: DemoState; transfer: TransferEpisode; actorId: string }) {
   const { run, error } = useCommand();
   const [org, setOrg] = useState("");
+  const [profileId, setProfileId] = useState("");
+  const kind = transfer.handover?.transferKind;
+  const profiles = kind ? listReceiverProfiles(kind, state.organizations.map((o) => o.id)).filter((x) => x.orgId !== transfer.receivingOrgId && x.orgId !== transfer.sendingOrgId) : [];
+  if (transfer.handover)
+    return (
+      <section className="card border-red-300">
+        <h2 className="font-semibold text-red-900">Unresolved: the receiving service rejected this transfer</h2>
+        <p className="text-sm mt-1">
+          Responsibility stays with the sending team. Relay does not choose another provider: a sending professional may explicitly redirect to another
+          service, and the handover is re-validated against that service&apos;s profile.
+        </p>
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <Select
+            label="Redirect to (receiver profile)"
+            value={profileId}
+            onChange={setProfileId}
+            placeholder="— choose a service —"
+            options={profiles.map((x) => ({ value: x.id, label: x.name }))}
+          />
+          {profileId && (
+            <TextAction
+              label="Redirect transfer"
+              fieldLabel="Clinical reason / note to the new receiving service"
+              variant="primary"
+              onSubmit={(note) =>
+                run({
+                  type: "redirectTransfer",
+                  actorId,
+                  transferId: transfer.id,
+                  receivingOrgId: getReceiverProfile(profileId).orgId,
+                  receiverProfileId: profileId,
+                  note,
+                })
+              }
+            />
+          )}
+        </div>
+        <div className="mt-2">
+          <ErrorAlert error={error} />
+        </div>
+      </section>
+    );
   return (
     <section className="card border-red-300">
       <h2 className="font-semibold text-red-900">Unresolved: the receiving service rejected this transfer</h2>

@@ -6,15 +6,29 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { apply, type Command } from "@/core/engine";
 import type { DemoState } from "@/core/types";
-import { createSeedState } from "@/scenarios/seed";
+import { DEFAULT_DEMO_SET, DEMO_SETS, type DemoSetId } from "@/scenarios";
 
-const KEY = "doorstep:demo-state:v2"; // bumped: Prompt 2 handover model
+const KEY = "doorstep:demo-state:v3"; // bumped: Prompt 3 cataract demo set
+const SET_KEY = "doorstep:demo-set";
 const listeners = new Set<() => void>();
 let seed: DemoState | null = null;
 let current: DemoState | null = null;
+let currentSet: DemoSetId | null = null;
 
+/** Server/hydration snapshot: always the default demo set. */
 function getSeed(): DemoState {
-  return (seed ??= createSeedState());
+  return (seed ??= DEMO_SETS[DEFAULT_DEMO_SET].create());
+}
+
+function loadSet(): DemoSetId {
+  if (currentSet) return currentSet;
+  try {
+    const v = typeof window !== "undefined" ? window.localStorage.getItem(SET_KEY) : null;
+    currentSet = v && v in DEMO_SETS ? (v as DemoSetId) : DEFAULT_DEMO_SET;
+  } catch {
+    currentSet = DEFAULT_DEMO_SET;
+  }
+  return currentSet;
 }
 
 function load(): DemoState {
@@ -22,7 +36,8 @@ function load(): DemoState {
   try {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(KEY) : null;
     const parsed = raw ? (JSON.parse(raw) as DemoState) : null;
-    current = parsed && parsed.schemaVersion === 1 && Array.isArray(parsed.documents) ? parsed : getSeed();
+    const set = loadSet();
+    current = parsed && parsed.schemaVersion === 1 && Array.isArray(parsed.documents) ? parsed : set === DEFAULT_DEMO_SET ? getSeed() : DEMO_SETS[set].create();
   } catch {
     current = getSeed();
   }
@@ -65,8 +80,19 @@ export function dispatch(cmd: Command): { ok: true } | { ok: false; error: strin
   return { ok: true };
 }
 
-export function resetDemo() {
-  save(createSeedState());
+/** Restore the chosen demo set (default: the one currently loaded). */
+export function resetDemo(set: DemoSetId = loadSet()) {
+  currentSet = set;
+  try {
+    window.localStorage.setItem(SET_KEY, set);
+  } catch {
+    // in-memory only
+  }
+  save(DEMO_SETS[set].create());
+}
+
+export function useDemoSet(): DemoSetId {
+  return useSyncExternalStore(subscribe, loadSet, () => DEFAULT_DEMO_SET);
 }
 
 /** Dispatch with a per-component error message for display in an alert region. */

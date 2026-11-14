@@ -1,5 +1,5 @@
 "use client";
-import { organization, patient, practitioner, taskStatusLabel } from "@/core/selectors";
+import { organization, patient, practitioner, taskStatusLabel, transferBlockers } from "@/core/selectors";
 import type { CareTask, DemoState } from "@/core/types";
 import { computeMetrics, type Ratio } from "@/metrics/dashboard";
 import { useDemoState } from "@/state/store";
@@ -33,6 +33,8 @@ export default function Dashboard() {
           Demonstration metrics computed from synthetic events at demo time {fmt(state.now)}. Not validated NHS impact estimates. No predictive or risk scoring.
         </p>
       </div>
+
+      <PipelineView state={state} m={m} />
 
       <section aria-label="Headline measures" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {tiles.map((t) => (
@@ -165,5 +167,82 @@ function TaskTable({ state, tasks, showOverdue }: { state: DemoState; tasks: Car
         </tbody>
       </table>
     </div>
+  );
+}
+
+function PipelineView({ state, m }: { state: DemoState; m: ReturnType<typeof computeMetrics> }) {
+  const p = m.pipeline;
+  const name = (t: { patientId: string }) => {
+    const x = patient(state, t.patientId);
+    return `${x?.displayName} (${x?.syntheticId})`;
+  };
+  const columns: { label: string; help: string; items: { key: string; text: string; sub?: string; alert?: boolean }[] }[] = [
+    {
+      label: "Awaiting information",
+      help: "Not sent: required info missing/unconfirmed, identity open or clarification pending",
+      items: p.awaitingInformation.map((t) => ({ key: t.id, text: name(t), sub: `${transferBlockers(state, t).length} blocker(s)` })),
+    },
+    { label: "Ready to send", help: "Not sent; nothing blocking", items: p.readyToSend.map((t) => ({ key: t.id, text: name(t) })) },
+    {
+      label: "Sent, not accepted",
+      help: "Sending team still responsible",
+      items: p.sentUnaccepted.map((t) => ({ key: t.id, text: name(t), sub: organization(state, t.receivingOrgId)?.name })),
+    },
+    {
+      label: "Accepted",
+      help: "Named receiving professional",
+      items: p.accepted.map((t) => ({ key: t.id, text: name(t), sub: practitioner(state, t.receivingPractitionerId)?.name })),
+    },
+    {
+      label: "Rejected — action needed",
+      help: "Sending team still responsible",
+      items: p.rejected.map((t) => ({ key: t.id, text: name(t), sub: t.decisions.at(-1)?.reason, alert: true })),
+    },
+    {
+      label: "Accepted, awaiting appointment",
+      help: "Booking milestone open (booking ≠ treatment)",
+      items: p.awaitingAppointment.map((x) => ({
+        key: x.transfer.id,
+        text: name(x.transfer),
+        sub: `${x.overdue ? `⚠ review deadline passed (${fmt(x.task.dueAt)}) — escalate to ` : `due ${fmt(x.task.dueAt)} · escalation contact `}${x.escalationContact?.name ?? "—"}`,
+        alert: x.overdue,
+      })),
+    },
+  ];
+  return (
+    <section aria-label="Handover pipeline" className="space-y-3">
+      <h2 className="font-semibold">Handover pipeline (simulated, from the event history)</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {columns.map((c) => (
+          <div key={c.label} className="card">
+            <div className="flex items-baseline justify-between">
+              <h3 className="font-medium">{c.label}</h3>
+              <span className="text-2xl font-semibold tabular-nums">{c.items.length}</span>
+            </div>
+            <p className="text-xs text-slate-600">{c.help}</p>
+            <ul className="mt-2 space-y-1 text-sm">
+              {c.items.map((i) => (
+                <li key={i.key} className={i.alert ? "text-red-900" : ""}>
+                  {i.text}
+                  {i.sub && <span className="block text-xs text-slate-600">{i.sub}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+      <div className="card">
+        <h3 className="font-medium">Completed downstream actions with supporting evidence ({p.completedWithEvidence.length})</h3>
+        <ul className="mt-1 space-y-1 text-sm">
+          {p.completedWithEvidence.map((k) => (
+            <li key={k.id}>
+              <strong>{k.description}</strong> — {name(state.transfers.find((t) => t.id === k.transferId)!)}: {k.evidence!.summary}{" "}
+              <span className="text-xs text-slate-500">(recorded by {practitioner(state, k.evidence!.recordedBy)?.name}, {fmt(k.evidence!.recordedAt)})</span>
+            </li>
+          ))}
+          {p.completedWithEvidence.length === 0 && <li className="text-slate-600">None yet.</li>}
+        </ul>
+      </div>
+    </section>
   );
 }

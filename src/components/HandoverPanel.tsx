@@ -3,7 +3,8 @@ import { useId, useState } from "react";
 import { handoverValidation, practitioner } from "@/core/selectors";
 import type { FieldValidation } from "@/core/validation";
 import type { DemoState, TransferEpisode } from "@/core/types";
-import { FIELD_BY_KEY } from "@/packs/fields";
+import { FIELD_BY_KEY, fieldLabel } from "@/packs/fields";
+import { formatProblem, hasConflict } from "@/core/validation";
 import { getReceiverProfile } from "@/packs/receivers";
 import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
 import { useCommand } from "@/state/store";
@@ -58,6 +59,13 @@ export function HandoverPanel({
             Profile {profile.id} v{profile.version} (review date {profile.reviewDate}) · intended receiving role: {profile.owningRole}
           </p>
           <p className="text-xs text-amber-900">{profile.disclaimer}</p>
+          {profile.capabilities && (
+            <ul className="mt-1 ml-5 list-disc text-xs text-slate-700" aria-label="Simulated service capability statements">
+              {profile.capabilities.map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="text-sm" aria-label="Required field summary">
           <span className="mr-2">Required:</span>
@@ -101,6 +109,7 @@ export function HandoverPanel({
         </table>
       </div>
       <ErrorAlert error={error} />
+      {editable && <BulkConfirm state={state} transfer={transfer} actorId={actorId} />}
 
       {h.extractionWarnings.length > 0 && (
         <details className="text-sm">
@@ -295,6 +304,47 @@ function FieldRow({
         </td>
       )}
     </tr>
+  );
+}
+
+/**
+ * Explicit, named bulk confirmation of UNFLAGGED values the acting professional is permitted to
+ * confirm. Ambiguous, conflicting, malformed or role-restricted fields are skipped and must be
+ * handled one by one. Each confirmation is its own audit event.
+ */
+function BulkConfirm({ state, transfer, actorId }: { state: DemoState; transfer: TransferEpisode; actorId: string }) {
+  const { run, error } = useCommand();
+  const h = transfer.handover!;
+  const profile = getReceiverProfile(h.receiverProfileId);
+  const me = practitioner(state, actorId);
+  if (transfer.status === "info-confirmed") return null;
+  const eligible = Object.values(h.fields).filter((f) => {
+    const rule = profile.fields.find((r) => r.key === f.key);
+    return (
+      !f.confirmedBy &&
+      f.value.trim() &&
+      !f.ambiguity &&
+      !hasConflict(f) &&
+      !formatProblem(f.key, f.value) &&
+      (!rule?.confirmRoles || (me && rule.confirmRoles.includes(me.role)))
+    );
+  });
+  if (!eligible.length) return null;
+  return (
+    <div className="rounded border border-slate-300 bg-slate-50 p-2 text-sm">
+      <button
+        className="btn-secondary"
+        onClick={() => {
+          for (const f of eligible) if (!run({ type: "confirmHandoverField", actorId, transferId: transfer.id, key: f.key })) break;
+        }}
+      >
+        I have reviewed these against the source — confirm {eligible.length} unflagged value{eligible.length === 1 ? "" : "s"} as {me?.name}
+      </button>
+      <p className="mt-1 text-xs text-slate-600">
+        Skips anything flagged, conflicting, malformed or needing another role: {eligible.map((f) => fieldLabel(f.key)).join(", ")}.
+      </p>
+      <ErrorAlert error={error} />
+    </div>
   );
 }
 

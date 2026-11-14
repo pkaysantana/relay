@@ -1,7 +1,7 @@
 "use client";
 import { attentionReasons, patient, transferBlockers, transferStatusLabel } from "@/core/selectors";
 import type { DemoState, TransferEpisode } from "@/core/types";
-import { SCENARIO_LABELS } from "@/scenarios/seed";
+import { SCENARIO_LABELS } from "@/scenarios";
 import { TransferStatusBadge } from "./ui";
 
 export function TransferList({
