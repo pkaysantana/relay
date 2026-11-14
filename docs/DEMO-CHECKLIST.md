@@ -17,24 +17,30 @@ Everything shown is synthetic. Clinical requirements are illustrative and pendin
    → The new transfer opens with status **"Draft — awaiting sender confirmation"**. The panel heading reads "Treatment transfer → Brookfield Eye Centre…", with the capability bullets underneath ("No general anaesthesia facilities on this site (synthetic assumption…)").
    → **Patient identity: match**.
    → Row **Eye (laterality) for the proposed procedure**: **✕ RED**, "Required by … — missing", value *Missing*. The treatment-plan text begins "Right cataract surgery…", but Relay does **not** infer the eye from it.
-   → Row **Patient agreement to the alternative provider (not surgical consent)**: **! AMBER**, "Flagged as ambiguous: contains "To be confirmed"", with the quote from the source line.
+   → Row **Patient agreement to the alternative provider (not surgical consent)**: **! AMBER**, "Agreement must be recorded as Agreed or Declined — correct the value" and "Flagged as ambiguous: not an explicit agreement ("To be confirmed with patient")", with the quote from the source line.
    → The "Questions to resolve before sending" box lists "Which eye (right or left) is the proposed procedure for?" and the agreement question. "Sign off the handover" says **"Awaiting sender confirmation — cannot be sent yet."**
 5. **Acting as** → choose **Priya Shah (elective pathway coordinator) — pathway-coordinator**. (After capture it defaults to the responsible professional, Mr Reyes.)
-6. On the agreement row, click **Correct**. Replace the text with: `Yes — patient agreed by phone on 14/11/2026 to consider Brookfield Eye Centre (synthetic record)`. Click **Save & confirm**.
-   → **✓ GREEN**. Confirmation column: "✓ Priya Shah (elective pathway coordinator) (pathway-coordinator)". Evidence column: "Entered manually by Priya Shah … — no source document".
+6. On the agreement row, click **Correct**. The editor is a picker with three options: *Not yet confirmed (clear)*, *Agreed*, *Declined*. Choose **Agreed** and click **Save & confirm**.
+   → **✓ GREEN**, value "agreed". Confirmation column: "✓ Priya Shah (elective pathway coordinator) (pathway-coordinator)". Evidence column: "Entered manually by Priya Shah … — no source document".
 7. On the laterality row, click **Add**. Type `right` and click **Save & confirm**.
    → The value is saved, but a red error appears: **"Eye (laterality) for the proposed procedure must be confirmed by: ophthalmologist (you are pathway-coordinator)"**. The row stays **! AMBER** ("Must be confirmed by: ophthalmologist"). *The coordinator cannot confirm a restricted clinical detail.*
 8. **Acting as** → **Mr Tomas Reyes (consultant ophthalmologist) — ophthalmologist**.
 9. On the laterality row, click **Confirm** → **✓ GREEN**, confirmed by Mr Tomas Reyes (ophthalmologist).
-10. Click **I have reviewed these against the source — confirm N unflagged values as Mr Tomas Reyes…**. (The button lists the fields it covers, including the treatment plan. It skips anything flagged, conflicting or needing another role.)
+10. Click **I have reviewed these against the source — confirm N unflagged values as Mr Tomas Reyes…**. (The button lists the fields it covers, including the treatment plan and allergies. It skips anything flagged, conflicting, declined or needing another role. The engine re-checks the role on every field.)
     → Every **Required** row is **✓ GREEN**. The summary reads "Required: 11 green 0 amber 0 red". "Sign off the handover" says **"All receiver-required information is present and confirmed. Ready for sign-off."**
-11. Click **Sign off handover**.
+11. Click **Sign off handover**. (The sign-off box says "Allowed sign-off roles for this treatment transfer between providers (demonstration policy): ophthalmologist". Signing off as Priya is refused by the engine.)
     → Status **"Information confirmed by sender"**. "2. Generate the structured handover" appears.
 12. Click **Generate handover**.
     → "3. Confirm deadlines and send": three actions with placeholder deadlines (the booking review shows "Synthetic administrative review deadline (4 days) — NOT a national NHS standard…"). Receiving organisation is pre-selected as **Brookfield Eye Centre (independent sector, NHS-funded)**.
 13. Tick **"I, Mr Tomas Reyes (consultant ophthalmologist), confirm these deadlines are clinically appropriate for this patient."** Click **Send transfer**.
     → Status **"Sent — not acknowledged"**. "Required actions" lists the three tasks as **"Requested — awaiting receipt"**.
 14. (Optional, shows elapsed time) Click **+6h** in the header.
+
+## Safety checks for Keshav (UNVERIFIED in a browser; the same rules are covered by `tests/safety.test.ts`)
+S1. **Declined blocks.** Reset, then capture as in steps 3–4. On the agreement row: **Correct** → **Declined** → **Save & confirm** (acting as Priya).
+    → **✕ RED**: "Patient declined — this handover must not be sent to this provider" and "Refusal confirmed by a named professional". The questions box says "The patient declined. The sending team decides the next step; Relay does not choose another provider." As Mr Reyes, **Sign off handover** shows the error "Cannot sign off: Patient agreement to the alternative provider (not surgical consent): Patient declined…".
+S2. **Coordinator bulk confirm excludes clinical fields.** After a fresh capture, act as Priya. The bulk button's list ("Skips anything flagged…: …") does **not** include Ophthalmologist's documented treatment plan, Allergies or other clinical fields. Clicking **Confirm** on *Ophthalmologist's documented treatment plan* or *Allergies* as Priya shows "… must be confirmed by: ophthalmologist (you are pathway-coordinator)".
+S3. **Sign-off role.** With every required row GREEN, act as Priya and click **Sign off handover** → error "…needs one of these roles: ophthalmologist (you are pathway-coordinator)". (The GP case is covered by an automated test only: the cataract demo has no GP at the eye service.)
 
 ## Scenario E: receiving side (`/receive`)
 15. Click **Receiving team**. Receiving organisation = **Brookfield Eye Centre (independent sector, NHS-funded)**; Acting as = **Dr Helen Ward (ophthalmic surgeon)** (both are the defaults).

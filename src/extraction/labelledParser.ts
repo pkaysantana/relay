@@ -49,6 +49,13 @@ function normaliseValue(def: FieldDefinition, raw: string): { value: string; amb
     if (["no", "n"].includes(l)) return { value: "no" };
     return { value: v, ambiguity: "expected yes or no" };
   }
+  if (def.format === "agreement") {
+    // Only an explicit statement maps to a state; anything else stays unresolved for a human.
+    const l = v.toLowerCase();
+    if (/^(yes|agreed|patient agreed|patient agrees)\b/.test(l)) return { value: "agreed" };
+    if (/^(no|declined|refused|patient declined|patient refused|patient does not agree)\b/.test(l)) return { value: "declined" };
+    return { value: v, ambiguity: `not an explicit agreement ("${v}")` };
+  }
   if (def.format === "laterality") {
     const l = v.toLowerCase().replace(/[^a-z ]/g, "").trim();
     if (["right", "r", "re", "right eye"].includes(l)) return { value: "right" };

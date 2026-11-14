@@ -62,6 +62,32 @@ export function hasConflict(f: HandoverField): boolean {
   return f.entryMethod !== "manual" && sourceValues(f).length > 1;
 }
 
+/** Demonstration role policy: may a professional with `role` confirm this field under this profile? */
+export function canConfirm(profile: ReceiverProfile, key: string, role: string | undefined): boolean {
+  const rule = profile.fields.find((r) => r.key === key);
+  return !rule?.confirmRoles || (!!role && rule.confirmRoles.includes(role));
+}
+
+/**
+ * Fields a professional may bulk-confirm: present, unconfirmed, unflagged, consistent, well-formed
+ * and permitted for their role. Bulk confirmation is just repeated single confirmations; the engine
+ * re-checks every one.
+ */
+export function bulkConfirmCandidates(h: Handover, profile: ReceiverProfile, role: string | undefined): string[] {
+  return Object.values(h.fields)
+    .filter(
+      (f) =>
+        !f.confirmedBy &&
+        !!f.value.trim() &&
+        !f.ambiguity &&
+        !hasConflict(f) &&
+        !formatProblem(f.key, f.value) &&
+        !(FIELD_BY_KEY[f.key]?.format === "agreement" && norm(f.value) === "declined") &&
+        canConfirm(profile, f.key, role),
+    )
+    .map((f) => f.key);
+}
+
 export function formatProblem(key: string, value: string): string | undefined {
   const def = FIELD_BY_KEY[key];
   if (!def || !value.trim()) return undefined;
@@ -69,6 +95,8 @@ export function formatProblem(key: string, value: string): string | undefined {
   if (def.format === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) return "Date must be YYYY-MM-DD";
   if (def.format === "yes-no" && !["yes", "no"].includes(norm(value))) return "Expected yes or no";
   if (def.format === "laterality" && !["right", "left"].includes(norm(value))) return "Expected a single eye: right or left";
+  if (def.format === "agreement" && !["agreed", "declined"].includes(norm(value)))
+    return "Agreement must be recorded as Agreed or Declined";
   return undefined;
 }
 
@@ -184,7 +212,27 @@ export function validateHandover(
 
     const malformed = formatProblem(r.key, f.value);
     if (malformed) {
-      return { ...base, status: "amber" as const, blocking: required, reasons: [`${malformed} — correct the value`], question: r.prompt };
+      return {
+        ...base,
+        status: "amber" as const,
+        blocking: required,
+        reasons: [`${malformed} — correct the value`, ...(f.ambiguity ? [`Flagged as ambiguous: ${f.ambiguity}`] : [])],
+        question: r.prompt,
+      };
+    }
+
+    // A recorded refusal is never treated as agreement, even once confirmed. Relay does not pick another provider.
+    if (FIELD_BY_KEY[r.key]?.format === "agreement" && norm(f.value) === "declined") {
+      return {
+        ...base,
+        status: "red" as const,
+        blocking: required,
+        reasons: [
+          "Patient declined — this handover must not be sent to this provider",
+          f.confirmedBy ? "Refusal confirmed by a named professional" : "Refusal not yet confirmed",
+        ],
+        question: required ? "The patient declined. The sending team decides the next step; Relay does not choose another provider." : undefined,
+      };
     }
 
     if (!f.confirmedBy) {

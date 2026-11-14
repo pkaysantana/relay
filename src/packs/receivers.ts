@@ -39,6 +39,11 @@ export interface ReceiverProfile {
   /** Pathway pack used for the tracked actions when this profile is chosen. */
   defaultPackId?: string;
   /**
+   * Sign-off policy for this receiver. Overrides the transfer kind's default roles. Demonstration
+   * policy only — not a statement of universal NHS workforce rules.
+   */
+  signOffRoles?: string[];
+  /**
    * Simulated service capability statements, DISPLAYED to the receiving professional. Never used to
    * block or auto-reject: the receiving professional decides.
    */
@@ -130,6 +135,12 @@ export const specialistOutpatientProfile: ReceiverProfile = {
 const CATARACT_DISCLAIMER =
   "Synthetic demonstration profile — Illustrative, pending clinician sign-off. Requirements are examples, NOT an authorised NHS minimum dataset, and have not been approved by any provider.";
 
+/**
+ * Demonstration role policy (illustrative — pending clinician sign-off): a coordinator may enter or
+ * transcribe these values, but only an ophthalmologist may confirm them.
+ */
+const CLINICAL_CONFIRMERS = ["ophthalmologist"];
+
 const cataractFields: ProfileFieldRule[] = [
   ...identity,
   { key: "sendingService", required: true, prompt: "Which NHS clinical service is sending the patient?" },
@@ -138,14 +149,14 @@ const cataractFields: ProfileFieldRule[] = [
   {
     key: "treatmentPlan",
     required: true,
-    confirmRoles: ["ophthalmologist"],
+    confirmRoles: CLINICAL_CONFIRMERS,
     prompt: "What treatment plan has the ophthalmologist documented?",
     rationale: "The decision to offer surgery is already made by the sending team; the receiver needs the documented plan.",
   },
   {
     key: "laterality",
     required: true,
-    confirmRoles: ["ophthalmologist"],
+    confirmRoles: CLINICAL_CONFIRMERS,
     prompt: "Which eye (right or left) is the proposed procedure for?",
     rationale: "Illustrative: laterality must be explicit and clinician-confirmed; it is never inferred from free text.",
   },
@@ -153,7 +164,7 @@ const cataractFields: ProfileFieldRule[] = [
     key: "providerTransferAgreement",
     required: true,
     confirmRoles: ["pathway-coordinator", "ophthalmologist"],
-    prompt: "Has the patient agreed to consider the alternative provider? (This is not consent for surgery.)",
+    prompt: "Has the patient agreed to the alternative provider — Agreed or Declined? (This is not consent for surgery.)",
     rationale: "Patient agreement to a different provider is recorded separately from clinical consent.",
   },
   { key: "receivingContact", required: true, prompt: "Who is the receiving organisation's contact / owning role?" },
@@ -172,11 +183,11 @@ const cataractFields: ProfileFieldRule[] = [
   { key: "intraocularPressure", required: false, prompt: "Intraocular pressure, if available?" },
   { key: "ocularHistory", required: false, prompt: "Ocular history or co-pathology?" },
   { key: "medicalHistory", required: false, prompt: "Relevant medical history?" },
-  { key: "medications", required: false, prompt: "Current medicines?" },
-  { key: "allergies", required: false, prompt: "Allergies?" },
-  { key: "anticoagulants", required: false, prompt: "Anticoagulant history, when clinically relevant?" },
-  { key: "alphaBlockers", required: false, prompt: "Alpha-blocker history, when clinically relevant?" },
-  { key: "anaestheticRequirement", required: false, prompt: "Anaesthetic considerations?" },
+  { key: "medications", required: false, confirmRoles: CLINICAL_CONFIRMERS, prompt: "Current medicines?" },
+  { key: "allergies", required: false, confirmRoles: CLINICAL_CONFIRMERS, prompt: "Allergies?" },
+  { key: "anticoagulants", required: false, confirmRoles: CLINICAL_CONFIRMERS, prompt: "Anticoagulant history, when clinically relevant?" },
+  { key: "alphaBlockers", required: false, confirmRoles: CLINICAL_CONFIRMERS, prompt: "Alpha-blocker history, when clinically relevant?" },
+  { key: "anaestheticRequirement", required: false, confirmRoles: CLINICAL_CONFIRMERS, prompt: "Anaesthetic considerations?" },
   { key: "biometry", required: false, prompt: "Biometry / keratometry, if available at this stage?" },
   { key: "accessNeeds", required: false, prompt: "Mobility, access, transport or communication needs?" },
   { key: "investigations", required: false, prompt: "Outstanding investigations or appointments?" },
@@ -192,6 +203,7 @@ export const independentOphthalmologyProfile: ReceiverProfile = {
   orgId: "org-isp",
   transferKinds: ["provider-move"],
   defaultPackId: "cataract-provider-move",
+  signOffRoles: CLINICAL_CONFIRMERS, // demonstration policy: the sending ophthalmologist signs off
   capabilities: [
     "Day-case cataract surgery under local or topical anaesthesia (synthetic assumption).",
     "No general anaesthesia facilities on this site (synthetic assumption, subject to clinician confirmation).",
@@ -213,6 +225,7 @@ export const nhsOphthalmologyProfile: ReceiverProfile = {
   orgId: "org-westmoor",
   transferKinds: ["provider-move", "referral"],
   defaultPackId: "cataract-provider-move",
+  signOffRoles: CLINICAL_CONFIRMERS, // demonstration policy: the sending ophthalmologist signs off
   capabilities: [
     "Hospital ophthalmology including theatre lists with anaesthetic support (synthetic assumption).",
     "Capability statements are shown to the receiving professional; they never auto-reject a transfer.",

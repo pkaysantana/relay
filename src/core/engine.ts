@@ -20,7 +20,7 @@ import { getReceiverProfile, RECEIVER_PROFILES } from "@/packs/receivers";
 import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
 import type { ExtractedField } from "@/extraction/labelledParser";
 import { handoverValidation, missingRequiredFields, transferBlockers } from "./selectors";
-import { formatProblem, hasConflict } from "./validation";
+import { canConfirm, formatProblem, hasConflict } from "./validation";
 import type {
   CareTask,
   DemoState,
@@ -139,6 +139,11 @@ export const TASK_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
 };
 
 export const SYSTEM_ACTOR = "demo-operator";
+
+/** Sign-off policy: the receiver profile's roles if set, else the transfer kind's defaults. */
+export function signOffRolesFor(h: { transferKind: TransferKind; receiverProfileId: string }): string[] {
+  return getReceiverProfile(h.receiverProfileId).signOffRoles ?? TRANSFER_KIND_CONFIG[h.transferKind].signOffRoles;
+}
 
 class CommandError extends Error {}
 const fail = (msg: string): never => {
@@ -276,9 +281,9 @@ function run(s: DemoState, cmd: Command): void {
         // Handover sign-off: every receiver-required field GREEN and identity resolved.
         if (Object.keys(cmd.fields ?? {}).length)
           fail("Handover fields are edited field by field, not via sign-off");
-        const kind = TRANSFER_KIND_CONFIG[t.handover.transferKind];
-        if (!kind.signOffRoles.includes(a.role))
-          fail(`Sign-off for a ${kind.label.toLowerCase()} needs one of these roles: ${kind.signOffRoles.join(", ")}`);
+        const roles = signOffRolesFor(t.handover);
+        if (!roles.includes(a.role))
+          fail(`Sign-off for this handover (${getReceiverProfile(t.handover.receiverProfileId).name}) needs one of these roles: ${roles.join(", ")} (you are ${a.role})`);
         const blockers = transferBlockers(s, t);
         if (blockers.length) fail(`Cannot sign off: ${blockers.join("; ")}`);
       } else {
@@ -416,9 +421,11 @@ function run(s: DemoState, cmd: Command): void {
       const problem = formatProblem(cmd.key, f!.value);
       if (problem) fail(`${problem}: correct it before confirming`);
       const a = actor(s, cmd.actorId)!;
-      const rule = getReceiverProfile(h.receiverProfileId).fields.find((r) => r.key === cmd.key);
-      if (rule?.confirmRoles && !rule.confirmRoles.includes(a.role))
-        fail(`${FIELD_BY_KEY[cmd.key]?.label ?? cmd.key} must be confirmed by: ${rule.confirmRoles.join(" or ")} (you are ${a.role})`);
+      const profileForField = getReceiverProfile(h.receiverProfileId);
+      if (!canConfirm(profileForField, cmd.key, a.role)) {
+        const roles = profileForField.fields.find((r) => r.key === cmd.key)?.confirmRoles ?? [];
+        fail(`${FIELD_BY_KEY[cmd.key]?.label ?? cmd.key} must be confirmed by: ${roles.join(" or ")} (you are ${a.role})`);
+      }
       f!.confirmedBy = a.id;
       f!.confirmedRole = a.role;
       f!.confirmedAt = s.now;

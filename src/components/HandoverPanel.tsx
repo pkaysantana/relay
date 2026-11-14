@@ -4,7 +4,7 @@ import { handoverValidation, practitioner } from "@/core/selectors";
 import type { FieldValidation } from "@/core/validation";
 import type { DemoState, TransferEpisode } from "@/core/types";
 import { FIELD_BY_KEY, fieldLabel } from "@/packs/fields";
-import { formatProblem, hasConflict } from "@/core/validation";
+import { bulkConfirmCandidates } from "@/core/validation";
 import { getReceiverProfile } from "@/packs/receivers";
 import { TRANSFER_KIND_CONFIG } from "@/packs/transferKinds";
 import { useCommand } from "@/state/store";
@@ -221,7 +221,13 @@ function FieldRow({
             <label htmlFor={inputId} className="sr-only">
               {fv.label}
             </label>
-            {def?.long ? (
+            {def?.format === "agreement" ? (
+              <select id={inputId} className="input" value={draft} onChange={(e) => setDraft(e.target.value)}>
+                <option value="">Not yet confirmed (clear)</option>
+                <option value="agreed">Agreed</option>
+                <option value="declined">Declined</option>
+              </select>
+            ) : def?.long ? (
               <textarea id={inputId} className="input" rows={2} value={draft} onChange={(e) => setDraft(e.target.value)} />
             ) : (
               <input id={inputId} className="input" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={def?.format === "date" ? "YYYY-MM-DD" : undefined} />
@@ -293,7 +299,9 @@ function FieldRow({
               <button
                 className="btn-secondary"
                 onClick={() => {
-                  setDraft(f?.value ?? "");
+                  const v = f?.value ?? "";
+                  // Agreement picker only offers controlled states; anything else starts as "not yet confirmed".
+                  setDraft(def?.format === "agreement" && !["agreed", "declined"].includes(v) ? "" : v);
                   setEditing(true);
                 }}
               >
@@ -318,17 +326,8 @@ function BulkConfirm({ state, transfer, actorId }: { state: DemoState; transfer:
   const profile = getReceiverProfile(h.receiverProfileId);
   const me = practitioner(state, actorId);
   if (transfer.status === "info-confirmed") return null;
-  const eligible = Object.values(h.fields).filter((f) => {
-    const rule = profile.fields.find((r) => r.key === f.key);
-    return (
-      !f.confirmedBy &&
-      f.value.trim() &&
-      !f.ambiguity &&
-      !hasConflict(f) &&
-      !formatProblem(f.key, f.value) &&
-      (!rule?.confirmRoles || (me && rule.confirmRoles.includes(me.role)))
-    );
-  });
+  // Same role policy as single confirmation (the engine re-checks every field anyway).
+  const eligible = bulkConfirmCandidates(h, profile, me?.role).map((k) => h.fields[k]);
   if (!eligible.length) return null;
   return (
     <div className="rounded border border-slate-300 bg-slate-50 p-2 text-sm">

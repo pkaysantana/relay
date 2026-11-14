@@ -17,6 +17,7 @@ import { TaskCard } from "@/components/TaskCard";
 import { TransferList } from "@/components/TransferList";
 import { ErrorAlert, fmt, fromInput, Select, TextAction, toInput, TransferStatusBadge } from "@/components/ui";
 import { CapturePanel } from "@/components/CapturePanel";
+import { signOffRolesFor } from "@/core/engine";
 import { HandoverPanel, SignOffSummary } from "@/components/HandoverPanel";
 import { handoverValidation } from "@/core/selectors";
 import { getReceiverProfile, listReceiverProfiles } from "@/packs/receivers";
@@ -28,6 +29,7 @@ function SignOffStep({ state, transfer, actorId }: { state: DemoState; transfer:
   const v = handoverValidation(state, transfer)!;
   const a = practitioner(state, actorId);
   const kind = TRANSFER_KIND_CONFIG[transfer.handover!.transferKind];
+  const roles = signOffRolesFor(transfer.handover!);
   return (
     <section className="card">
       <h2 className="font-semibold">Sign off the handover</h2>
@@ -44,7 +46,7 @@ function SignOffStep({ state, transfer, actorId }: { state: DemoState; transfer:
         <p className="mt-1 text-sm text-green-900">All receiver-required information is present and confirmed. Ready for sign-off.</p>
       )}
       <p className="mt-2 text-sm">
-        Signing as <strong>{a?.name}</strong> ({a?.role}). Allowed roles for a {kind.label.toLowerCase()}: {kind.signOffRoles.join(", ")}. An
+        Signing as <strong>{a?.name}</strong> ({a?.role}). Allowed sign-off roles for this {kind.label.toLowerCase()} (demonstration policy): {roles.join(", ")}. An
         information-complete handover is not clinical acceptance by the receiver.
       </p>
       <button className="btn-primary mt-2" onClick={() => run({ type: "confirmSenderInfo", actorId, transferId: transfer.id, fields: {} })}>

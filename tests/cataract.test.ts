@@ -40,7 +40,7 @@ function captureE(): DemoState {
   );
 }
 
-const AGREEMENT = "Yes — patient agreed by phone on 14/11/2026 to consider Brookfield Eye Centre (synthetic record)";
+const AGREEMENT = "agreed"; // controlled state: agreed | declined
 
 /** Full live-demo sequence: correct → confirm (two roles) → sign off → send → accept. */
 function runE(): DemoState {

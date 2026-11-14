@@ -5,7 +5,8 @@
  *
  * OWNER: clinical packs.
  */
-export type FieldFormat = "text" | "date" | "nhs-number" | "yes-no" | "laterality";
+/** "agreement": controlled state — "agreed" | "declined". Absent/unconfirmed = not yet confirmed. */
+export type FieldFormat = "text" | "date" | "nhs-number" | "yes-no" | "laterality" | "agreement";
 
 export interface FieldDefinition {
   key: string;
@@ -34,7 +35,7 @@ export const FIELD_CATALOGUE: FieldDefinition[] = [
   { key: "interpreterLanguage", label: "Interpreter language", aliases: ["interpreter language"], format: "text" },
   { key: "clinicalAssessment", label: "Existing clinical assessment", aliases: ["clinical assessment", "assessment"], format: "text", long: true },
   { key: "investigations", label: "Relevant investigations", aliases: ["relevant investigations", "investigations"], format: "text", long: true },
-  { key: "patientChoice", label: "Patient consent / choice recorded", aliases: ["patient consent", "patient choice", "consent"], format: "text" },
+  { key: "patientChoice", label: "Patient consent / choice recorded", aliases: ["patient consent", "patient choice", "consent"], format: "agreement" },
   { key: "previousProvider", label: "Current treating provider", aliases: ["current provider", "previous provider", "transferring provider"], format: "text" },
   { key: "accessNotes", label: "Access / visit notes", aliases: ["access notes", "access"], format: "text", long: true },
   // --- Fields used by the cataract demonstration (illustrative — pending clinician sign-off)
@@ -46,7 +47,7 @@ export const FIELD_CATALOGUE: FieldDefinition[] = [
     key: "providerTransferAgreement",
     label: "Patient agreement to the alternative provider (not surgical consent)",
     aliases: ["patient agreement to alternative provider", "agreement to alternative provider", "patient agreement to transfer"],
-    format: "text",
+    format: "agreement",
   },
   { key: "receivingContact", label: "Receiving organisation contact / owning role", aliases: ["receiving contact"], format: "text" },
   { key: "nextAction", label: "Required next action", aliases: ["next action", "required next action"], format: "text" },
