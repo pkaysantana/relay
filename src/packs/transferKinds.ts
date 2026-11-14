@@ -39,6 +39,6 @@ export const TRANSFER_KIND_CONFIG: Record<TransferKind, TransferKindConfig> = {
     senderNoun: "Transferring provider",
     documentNoun: "Treatment transfer",
     signOffRoles: ["discharging-clinician", "specialist-clinician", "gp", "ophthalmologist"],
-    simulatedNextStep: "Simulated: receiving provider takes over the episode (mock — no PTL/DMAS integration)",
+    simulatedNextStep: "Simulated: receiving provider proceeds under its own pathway (mock — no PTL/DMAS integration)",
   },
 };

@@ -1,59 +1,66 @@
-# Manual click-through checklist
+# Demo click path: cataract handover (NHS eye service → independent provider)
 
-**Status: NOT browser-verified by Claude.** The Chrome extension was not connected. The same command sequences are covered by automated engine/store tests (`tests/cataract.test.ts`, `tests/handover.test.ts`). The server-rendered HTML of `/hub`, `/receive` and `/dashboard` was checked with curl. Clicking through in a real browser is still outstanding.
+> **UNVERIFIED IN A BROWSER.** Nobody has clicked through this yet. Claude's browser tool (Chrome extension) was not connected, so the steps below were traced from the UI source code. The same command sequence runs in automated tests (`tests/cataract.test.ts` → "E end-to-end"). Before the pitch, one person should click through once and tick each step.
 
-Setup: run `npm run dev` and open http://localhost:3000/hub. In the header, set **Demo** to "Cataract: NHS eye service → independent provider". Selecting it resets that demo.
+Everything shown is synthetic. Clinical requirements are illustrative and pending clinician sign-off. Dashboard figures are simulated.
 
-All data is synthetic. Clinical content is illustrative and pending clinician sign-off.
+## Setup
+1. `npm run dev`, then open http://localhost:3000/hub.
+2. In the header, check that **Demo:** shows "Cataract: NHS eye service → independent provider". Click **Reset demo**, then **Confirm reset**.
+   → The demo clock reads **Sat 14 Nov, 09:30**. "Outgoing transfers (sender view)" lists A, B, C and D.
 
----
+## Scenario E: live demo (sending side, `/hub`)
+3. Click **+ Capture a new handover**.
+   → Pre-filled: "1. Source documents (synthetic)" has *Cataract transfer package — Synthetic Patient K (live demo)* ticked. 2. Patient = *Synthetic Patient K · NHS 999 100 0005*. 3. Transfer kind = *Treatment transfer between providers*. 4. Receiving-service profile = *Brookfield Eye Centre — NHS-funded independent cataract provider (synthetic)…*. 5. Responsible sending professional = *Mr Tomas Reyes (consultant ophthalmologist) — ophthalmologist*. 6. Captured by = *Priya Shah (elective pathway coordinator) — pathway-coordinator*.
+   (The sending service is implied by the responsible professional: Northgate Hospital Eye Service.)
+4. Click **Extract and create draft**.
+   → The new transfer opens with status **"Draft — awaiting sender confirmation"**. The panel heading reads "Treatment transfer → Brookfield Eye Centre…", with the capability bullets underneath ("No general anaesthesia facilities on this site (synthetic assumption…)").
+   → **Patient identity: match**.
+   → Row **Eye (laterality) for the proposed procedure**: **✕ RED**, "Required by … — missing", value *Missing*. The treatment-plan text begins "Right cataract surgery…", but Relay does **not** infer the eye from it.
+   → Row **Patient agreement to the alternative provider (not surgical consent)**: **! AMBER**, "Flagged as ambiguous: contains "To be confirmed"", with the quote from the source line.
+   → The "Questions to resolve before sending" box lists "Which eye (right or left) is the proposed procedure for?" and the agreement question. "Sign off the handover" says **"Awaiting sender confirmation — cannot be sent yet."**
+5. **Acting as** → choose **Priya Shah (elective pathway coordinator) — pathway-coordinator**. (After capture it defaults to the responsible professional, Mr Reyes.)
+6. On the agreement row, click **Correct**. Replace the text with: `Yes — patient agreed by phone on 14/11/2026 to consider Brookfield Eye Centre (synthetic record)`. Click **Save & confirm**.
+   → **✓ GREEN**. Confirmation column: "✓ Priya Shah (elective pathway coordinator) (pathway-coordinator)". Evidence column: "Entered manually by Priya Shah … — no source document".
+7. On the laterality row, click **Add**. Type `right` and click **Save & confirm**.
+   → The value is saved, but a red error appears: **"Eye (laterality) for the proposed procedure must be confirmed by: ophthalmologist (you are pathway-coordinator)"**. The row stays **! AMBER** ("Must be confirmed by: ophthalmologist"). *The coordinator cannot confirm a restricted clinical detail.*
+8. **Acting as** → **Mr Tomas Reyes (consultant ophthalmologist) — ophthalmologist**.
+9. On the laterality row, click **Confirm** → **✓ GREEN**, confirmed by Mr Tomas Reyes (ophthalmologist).
+10. Click **I have reviewed these against the source — confirm N unflagged values as Mr Tomas Reyes…**. (The button lists the fields it covers, including the treatment plan. It skips anything flagged, conflicting or needing another role.)
+    → Every **Required** row is **✓ GREEN**. The summary reads "Required: 11 green 0 amber 0 red". "Sign off the handover" says **"All receiver-required information is present and confirmed. Ready for sign-off."**
+11. Click **Sign off handover**.
+    → Status **"Information confirmed by sender"**. "2. Generate the structured handover" appears.
+12. Click **Generate handover**.
+    → "3. Confirm deadlines and send": three actions with placeholder deadlines (the booking review shows "Synthetic administrative review deadline (4 days) — NOT a national NHS standard…"). Receiving organisation is pre-selected as **Brookfield Eye Centre (independent sector, NHS-funded)**.
+13. Tick **"I, Mr Tomas Reyes (consultant ophthalmologist), confirm these deadlines are clinically appropriate for this patient."** Click **Send transfer**.
+    → Status **"Sent — not acknowledged"**. "Required actions" lists the three tasks as **"Requested — awaiting receipt"**.
+14. (Optional, shows elapsed time) Click **+6h** in the header.
 
-## Cataract demo (NHS hospital eye service → NHS-funded independent provider)
+## Scenario E: receiving side (`/receive`)
+15. Click **Receiving team**. Receiving organisation = **Brookfield Eye Centre (independent sector, NHS-funded)**; Acting as = **Dr Helen Ward (ophthalmic surgeon)** (both are the defaults).
+16. In **Inbox**, click **Synthetic Patient K SYN-C005**.
+    → "Treatment transfer between providers · From Mr Tomas Reyes…"; "Signed off by **Mr Tomas Reyes (consultant ophthalmologist)** (ophthalmologist)"; the same handover panel with source quotes (read-only).
+17. Click **Acknowledge receipt** → status **"Acknowledged — responsibility NOT yet accepted"**.
+18. Click **Accept responsibility** without choosing anyone.
+    → Error **"Cannot accept without naming the responsible professional"**.
+19. Set **Named responsible professional (required)** to **Dr Helen Ward (ophthalmic surgeon)**, then click **Accept responsibility**.
+    → Status **"Handover accepted by named professional"**. "Decisions on responsibility" reads: *accepted by Dr Helen Ward (ophthalmic surgeon) (ophthalmic-surgeon), Sat 14 Nov, …*. The simulated next step reads "(mock — no PTL/DMAS integration)". All three actions read **"Accepted — not started"**; nothing is marked done.
 
-### D — Contradictory sources (opens by default on /hub)
-1. In the left list, select **D — sources disagree on laterality**.
-   - Expected: the status reads "Draft — awaiting sender confirmation". The **Eye (laterality)** row is **✕ RED**: "Source documents disagree: "right" vs "left"". Its evidence shows two quotes, one from the transfer package and one from the clinic letter.
-   - Expected: the question box reads "Which eye (right or left)…? The sources disagree (right / left) — which is correct?"
-2. Click **Confirm** on the laterality row. Expected error: "Sources disagree: enter the correct value before confirming".
-3. Click **Sign off handover**. Expected error: "Cannot sign off: …".
-4. (Optional resolution) With **Acting as** set to Mr Tomas Reyes (ophthalmologist): **Correct** → type `right` → **Save & confirm**. The row turns GREEN and the evidence reads "Entered manually by Mr Tomas Reyes — no source document". **Sign off handover** then succeeds.
+## Scenario E: dashboard (`/dashboard`)
+20. Click **Dashboard**.
+    → "Handover pipeline (simulated, from the event history)": **Accepted 3** (was 2). **Accepted, awaiting appointment** now also lists *Synthetic Patient K (SYN-C005)* with its due time and "escalation contact Priya Shah (elective pathway coordinator)".
+    → **Missing required fields identified at capture**: Brookfield profile · *Eye (laterality) for the proposed procedure* · 1.
+    → **Handover submission → receiving-team acceptance**: 3 accepted handovers.
 
-### E — Live demo (the primary 3-minute pitch flow)
-1. Click **+ Capture a new handover**. Expected defaults: *Cataract transfer package — Synthetic Patient K (live demo)* ticked; patient Synthetic Patient K; kind "Treatment transfer between providers"; profile "Brookfield Eye Centre…"; responsible sender Mr Tomas Reyes; captured by Priya Shah. Click **Extract and create draft**.
-   - Expected: the new transfer is selected. Patient identity shows **match**. **Eye (laterality)** is **✕ RED** (missing), even though the treatment plan text starts with "Right…" — Relay never infers it. **Patient agreement to the alternative provider** is **! AMBER**: "Flagged as ambiguous: contains "To be confirmed"".
-   - Expected: the capability statements are listed under the profile ("No general anaesthesia facilities on this site…").
-2. **Acting as** = Priya Shah (pathway-coordinator). On the agreement row: **Correct** → `Yes — patient agreed by phone on 14/11/2026 to consider Brookfield Eye Centre (synthetic record)` → **Save & confirm**.
-   - Expected: GREEN, "✓ Priya Shah (pathway-coordinator)", evidence "Entered manually by Priya Shah — no source document".
-3. Still as Priya: laterality **Add** → `right` → **Save & confirm**.
-   - Expected: the value is saved, but confirming shows the error "… must be confirmed by: ophthalmologist (you are pathway-coordinator)". The row stays AMBER.
-4. Switch **Acting as** to Mr Tomas Reyes (ophthalmologist). Click **Confirm** on laterality, then the bulk button "I have reviewed these against the source — confirm N unflagged values as Mr Tomas Reyes…".
-   - Expected: every required row is GREEN. The sign-off box says "Ready for sign-off".
-5. **Sign off handover** → **Generate handover** → step 3: Brookfield is pre-selected. Tick the deadline confirmation → **Send transfer**.
-   - Expected: status "Sent — not acknowledged". The tasks are listed, including "Record booking of the first appointment… (booking is not treatment)".
-6. Go to `/receive`. The organisation defaults to Brookfield Eye Centre; acting as Dr Helen Ward. Select **Synthetic Patient K**.
-   - Expected: transfer kind, "Signed off by Mr Tomas Reyes (ophthalmologist)", the handover panel with evidence, and the history.
-7. Click **Acknowledge receipt**. Expected status: "Acknowledged — responsibility NOT yet accepted".
-8. Click **Accept responsibility** with no professional chosen. Expected error: "Cannot accept without naming the responsible professional". Choose Dr Helen Ward → **Accept responsibility**.
-   - Expected: status "Responsibility accepted". The decision list reads "accepted by Dr Helen Ward (ophthalmic-surgeon), date". All tasks read "Accepted — not started". The simulated next-step text is shown, marked as a mock.
-9. Go to `/dashboard`. Expected: **Accepted** went from 2 to 3. **Accepted, awaiting appointment** now includes Patient K, "due … · escalation contact Priya Shah". After the capture, "Missing required fields identified at capture" lists Eye (laterality) under the Brookfield profile.
+## Other seeded scenarios (on `/hub` unless stated)
+21. **A — accepted, booking recorded (surgery not done)**: the booking task is **"Completed — evidence recorded"** ("…Booking only — no treatment has taken place."). The pre-op task reads **"Accepted · scheduled (not done)"**. The surgery-outcome task reads **"Accepted — not started"**.
+22. **B — rejected: anaesthetic capability mismatch**: every required row is GREEN. Status **"Rejected — unresolved"**, with Dr Helen Ward's reason (general anaesthesia not available). The box "Unresolved: the receiving service rejected this transfer" says responsibility stays with the sending team and that Relay does not choose another provider. Optional: **Redirect to (receiver profile)** = Westmoor, then **Redirect transfer**.
+23. **C — accepted, no appointment by review deadline**: on `/dashboard`, "Accepted, awaiting appointment" shows Synthetic Patient H in red: **"⚠ review deadline passed (Fri 13 Nov, 10:00) — escalate to Priya Shah…"**. "Overdue tasks by responsible team" lists Brookfield as about 24 hours overdue.
+24. **D — sources disagree on laterality** (opens by default): the laterality row is **✕ RED**, "Source documents disagree: "right" vs "left"", with two quotes. Clicking **Confirm** gives the error "Sources disagree: enter the correct value before confirming". **Sign off handover** is refused.
 
-### A — Successful transfer, booking ≠ surgery
-- `/hub` → **A — accepted, booking recorded**. Expected: all required rows GREEN. The booking task is **Completed — evidence recorded** ("…Booking only — no treatment has taken place"). The pre-op task reads "Accepted · scheduled (not done)". The surgery-outcome task reads **Accepted — not started**.
-- `/dashboard` → "Completed downstream actions with supporting evidence" lists only the booking.
+## Refresh and reset
+25. Press **F5** on any page. → The state persists (stored in the browser). On `/hub` the default selection returns to D, and Patient K is still in the list.
+26. Click **Reset demo**, then **Confirm reset**. → Only A–D remain, the clock reads Sat 14 Nov, 09:30, and Patient K is gone. Repeat from step 3 for a second run.
 
-### B — Capability mismatch (rejected)
-- `/hub` → **B — rejected: anaesthetic capability mismatch**. Expected: all required rows GREEN (the information was complete). The status reads "Rejected — unresolved", with Dr Helen Ward's reason about general anaesthesia. The "Unresolved" box says Relay does not choose another provider.
-- (Optional) Redirect to (receiver profile) = *Westmoor Hospital Ophthalmology* → **Redirect transfer** → enter a note. Expected: status "Sent — not acknowledged", receiving organisation Westmoor, and no acceptance.
-- `/receive` → organisation Brookfield → B shows a decision list with "rejected by Dr Helen Ward…".
-
-### C — Accepted, no appointment by the review deadline
-- `/dashboard` → **Accepted, awaiting appointment** shows Synthetic Patient H in red: "⚠ review deadline passed (Fri 13 Nov, 10:00) — escalate to Priya Shah". **Overdue tasks by responsible team** lists Brookfield, about 24 hours overdue, with the original responsibility (Mr Tomas Reyes).
-- `/hub` → C → the booking task shows **Escalate** (sender side). Escalating records the event without changing the owner or status.
-
-### Reset
-- Click **Reset demo** → **Confirm reset**. Expected: only cataract scenarios A–D remain, and the demo clock reads Sat 14 Nov, 09:30.
-
----
-
-## Generic demo (Prompt 2 scenarios, unchanged)
-Switch **Demo** to "Generic handovers". Expected: transfers A–D (community / outpatient) as before. The previous checklist steps still apply: capture doc-5 (missing allergies), and doc-5 + doc-6 for the wrong-patient check.
+## Generic demo (unchanged)
+Choose **Demo:** "Generic handovers (discharge / referral)" to load the Prompt 2 scenarios. Switching demo set resets it.

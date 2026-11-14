@@ -124,7 +124,7 @@ function ReceiverDetail({
         )}
         {transfer.status === "received" && (
           <p className="mt-2 text-xs text-slate-700">
-            Complete information is not clinical acceptance. Accepting means a named professional here takes responsibility.
+            Complete information is not clinical acceptance. Accepting records that a named professional here accepts this handover; the scope of clinical responsibility follows the local pathway and contract.
           </p>
         )}
       </section>

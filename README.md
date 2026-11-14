@@ -19,6 +19,8 @@ npm test        # 65 tests on synthetic scenarios (not real-world evidence)
 npm run build
 ```
 
+All dashboard figures and test results are simulated from synthetic events. They are not measurements of real NHS performance and do not show reduced waiting times or improved outcomes.
+
 Views: `/hub` is the sending service (capture, review, confirm, send). `/receive` is the receiving provider (acknowledge, then accept, reject or ask for clarification). `/dashboard` shows the pipeline and operational measures. Use the header to switch demo set, advance the demo clock or reset.
 
 For the demo walkthrough see [docs/DEMO-CHECKLIST.md](docs/DEMO-CHECKLIST.md). For architecture and rules see [CLAUDE.md](CLAUDE.md).

@@ -125,7 +125,7 @@ export function transferStatusLabel(t: TransferEpisode): string {
     case "clarification-requested":
       return "Clarification requested — unresolved";
     case "accepted":
-      return "Responsibility accepted";
+      return "Handover accepted by named professional";
     case "rejected":
       return "Rejected — unresolved";
   }
