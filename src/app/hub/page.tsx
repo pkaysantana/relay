@@ -1,5 +1,5 @@
 "use client";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   missingRequiredFields,
   organization,
@@ -84,6 +84,11 @@ export default function SendingHub() {
   const state = useDemoState();
   const demoSet = useDemoSet();
   const [choice, setSelected] = useState<string | undefined>();
+  // Deep link from the To-do page: /hub?t=<transferId>
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("t");
+    if (t) setSelected(t);
+  }, []);
   const selected =
     (choice && state.transfers.some((t) => t.id === choice) ? choice : undefined) ??
     (state.transfers.some((t) => t.id === DEMO_SETS[demoSet].defaultTransferId) ? DEMO_SETS[demoSet].defaultTransferId : state.transfers[0]?.id);

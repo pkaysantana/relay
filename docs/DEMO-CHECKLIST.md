@@ -4,8 +4,10 @@
 
 Everything shown is synthetic. Clinical requirements are illustrative and pending clinician sign-off. Dashboard figures are simulated.
 
+> **Navigation changed (Lovable shell integration).** The sidebar has **To do** (`/`), **Handovers** (`/hub`) and **Reports** (`/dashboard`). The "Viewing as" switch has **Coordinator** (`/`), **Receiving provider** (`/receive`) and **Patient** (`/patient`). Where a step below says "Receiving team", click **Receiving provider**; for "Dashboard", click **Reports**. The buttons inside each page are unchanged. This new shell is also UNVERIFIED in a browser.
+
 ## Setup
-1. `npm run dev`, then open http://localhost:3000/hub.
+1. `npm run dev`, then open http://localhost:3000/ (To do). Expected: three tiles (Overdue 1 · Needs action 2 · Completed with evidence 1) and cards for Patient H ("Overdue by 24h", **Escalate**), Patient G ("Returned by receiver", **Review**) and Patient J ("Handover awaiting information", **Review handover**). Click **Handovers** in the sidebar to reach `/hub`.
 2. In the header, check that **Demo:** shows "Cataract: NHS eye service → independent provider". Click **Reset demo**, then **Confirm reset**.
    → The demo clock reads **Sat 14 Nov, 09:30**. "Outgoing transfers (sender view)" lists A, B, C and D.
 
@@ -43,7 +45,7 @@ S2. **Coordinator bulk confirm excludes clinical fields.** After a fresh capture
 S3. **Sign-off role.** With every required row GREEN, act as Priya and click **Sign off handover** → error "…needs one of these roles: ophthalmologist (you are pathway-coordinator)". (The GP case is covered by an automated test only: the cataract demo has no GP at the eye service.)
 
 ## Scenario E: receiving side (`/receive`)
-15. Click **Receiving team**. Receiving organisation = **Brookfield Eye Centre (independent sector, NHS-funded)**; Acting as = **Dr Helen Ward (ophthalmic surgeon)** (both are the defaults).
+15. Click **Receiving provider** (in "Viewing as"). Receiving organisation = **Brookfield Eye Centre (independent sector, NHS-funded)**; Acting as = **Dr Helen Ward (ophthalmic surgeon)** (both are the defaults).
 16. In **Inbox**, click **Synthetic Patient K SYN-C005**.
     → "Treatment transfer between providers · From Mr Tomas Reyes…"; "Signed off by **Mr Tomas Reyes (consultant ophthalmologist)** (ophthalmologist)"; the same handover panel with source quotes (read-only).
 17. Click **Acknowledge receipt** → status **"Acknowledged — responsibility NOT yet accepted"**.
@@ -53,7 +55,7 @@ S3. **Sign-off role.** With every required row GREEN, act as Priya and click **S
     → Status **"Handover accepted by named professional"**. "Decisions on responsibility" reads: *accepted by Dr Helen Ward (ophthalmic surgeon) (ophthalmic-surgeon), Sat 14 Nov, …*. The simulated next step reads "(mock — no PTL/DMAS integration)". All three actions read **"Accepted — not started"**; nothing is marked done.
 
 ## Scenario E: dashboard (`/dashboard`)
-20. Click **Dashboard**.
+20. Click **Coordinator**, then **Reports** in the sidebar. (Optional: **Patient** in "Viewing as" shows Patient K at "Accepted by the receiving provider — you are here", "Booking not yet confirmed.", labelled "Fictional demonstration — not a real NHS service". **To do** now lists Patient K as "Accepted — awaiting appointment booking".)
     → "Handover pipeline (simulated, from the event history)": **Accepted 3** (was 2). **Accepted, awaiting appointment** now also lists *Synthetic Patient K (SYN-C005)* with its due time and "escalation contact Priya Shah (elective pathway coordinator)".
     → **Missing required fields identified at capture**: Brookfield profile · *Eye (laterality) for the proposed procedure* · 1.
     → **Handover submission → receiving-team acceptance**: 3 accepted handovers.
