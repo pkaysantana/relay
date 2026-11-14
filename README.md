@@ -1,4 +1,4 @@
-# Relay (repo: doorstep)
+# Relay 
 
 Relay is an illustrative handover-readiness and accountability layer. It is intended to complement existing referral and elective-care systems (such as NHS e-RS, Shared PTL and current mutual-aid workflows), not replace them.
 
